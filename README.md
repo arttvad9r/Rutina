@@ -45,6 +45,12 @@ export ANDROID_HOME=/home/artt/Android/Sdk JAVA_HOME=/usr/lib/jvm/java-17-openjd
 Готовые APK: `dist/Rutina-1.0.apk` (release, подписан собственным ключом)
 и `dist/Rutina-1.0-debug.apk`.
 
+**Установка на телефон.** Готовый APK — в разделе Releases:
+<https://github.com/arttvad9r/Rutina/releases/latest>. Скачивать файл и открывать
+на телефоне напрямую (GitHub отдаёт APK без блокировок). Папка `dist/` в git не
+попадает (см. `.gitignore`), поэтому обновлять ассет релиза нужно вручную:
+`gh release upload v1.0 dist/Rutina-1.0.apk --clobber`.
+
 **Подпись.** Release подписывается ключом из `keystore/rutina-release.jks`
 (пароль — в `keystore/keystore.properties`, папка в `.gitignore` и не попадает в git).
 Ключ нужно сохранить: обновления приложения ставятся только поверх APK с той же подписью.
