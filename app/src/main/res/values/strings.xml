@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Рутина</string>
+    <string name="notif_title">Рутина</string>
+    <string name="action_done">Сделано</string>
+    <string name="action_snooze">+15 мин</string>
+</resources>
