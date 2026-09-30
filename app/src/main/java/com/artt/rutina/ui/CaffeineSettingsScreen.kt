@@ -4,8 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +21,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,14 +38,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.rutina.data.CaffeineLogic
 import com.artt.rutina.data.CaffeineSettings
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-/** Готовые нормы кофеина: чипы, как везде в приложении. */
-private val TARGET_PRESETS = listOf(100, 150, 200, 250, 300, 400)
 
 /**
  * Настройки трекера кофеина: дневная норма и время подъёма и сна.
@@ -57,7 +55,7 @@ private val TARGET_PRESETS = listOf(100, 150, 200, 250, 300, 400)
  * На самом экране нужны приёмы и таймер, поэтому настройки уехали за шестерёнку в шапке,
  * а вместо них осталась одна строка-сводка.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaffeineSettingsScreen(
     settings: CaffeineSettings,
@@ -108,21 +106,29 @@ fun CaffeineSettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
-                Column(Modifier.padding(horizontal = Space.l, vertical = 12.dp)) {
+                Column(
+                    Modifier.padding(horizontal = Space.l, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text("Дневная норма", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(Space.s))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Space.s),
-                        verticalArrangement = Arrangement.spacedBy(Space.xs),
-                    ) {
-                        TARGET_PRESETS.forEach { mg ->
-                            FilterChip(
-                                selected = settings.targetMg == mg,
-                                onClick = { onSetTarget(mg) },
-                                label = { Text("$mg") },
-                                shape = Radius.field,
-                                colors = selectionChipColors(),
-                            )
+                    // Ручной выбор как у таймера: «− 150 мг +», шаг 50, границы 50–600.
+                    // Чипы-пресеты заставляли выбирать из готового списка — теперь любое
+                    // значение из диапазона доступно без захода в «Другое».
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StepperButton(Icons.Filled.Remove, "Меньше", enabled = settings.targetMg > CaffeineLogic.MIN_TARGET) {
+                            onSetTarget(settings.targetMg - CaffeineLogic.STEP_MG)
+                        }
+                        Text(
+                            text = "${settings.targetMg} мг",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = Space.m),
+                            textAlign = TextAlign.Center,
+                        )
+                        StepperButton(Icons.Filled.Add, "Больше", enabled = settings.targetMg < CaffeineLogic.MAX_TARGET) {
+                            onSetTarget(settings.targetMg + CaffeineLogic.STEP_MG)
                         }
                     }
                 }
@@ -175,6 +181,8 @@ fun CaffeineSettingsScreen(
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }

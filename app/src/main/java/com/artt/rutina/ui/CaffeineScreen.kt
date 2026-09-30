@@ -433,7 +433,8 @@ private fun TimerCard(
 
 /** Круглая кнопка «−» или «+» у таймера. */
 @Composable
-private fun StepperButton(
+/** Кнопка «−/+» степпера: общая для экрана кофеина и его настроек. */
+internal fun StepperButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     enabled: Boolean,

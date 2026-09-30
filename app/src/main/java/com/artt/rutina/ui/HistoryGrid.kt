@@ -1,19 +1,20 @@
 package com.artt.rutina.ui
 
 import java.time.LocalDate
+import java.time.YearMonth
 
 /**
- * Раскладка календаря истории: `days` дней, заканчивая сегодняшним, разбитые по неделям Пн→Вс.
- * Пустые ячейки в начале первой недели и в конце последней — null (нужны, чтобы все ряды
- * были одинаковой ширины при растяжении на экран).
+ * Календарь текущего месяца: строки — недели Пн→Вс, колонки — дни недели.
+ * Дни соседних месяцев, попадающие в первую/последнюю неделю, — null: сетка остаётся
+ * прямоугольной, а чужие дни не выглядят «пропущенными» отметками.
  */
-internal fun historyGrid(today: LocalDate, days: Int = 60): List<List<LocalDate?>> {
-    require(days > 0) { "дней должно быть больше нуля" }
-    val first = today.minusDays((days - 1).toLong())
-    val leading = first.dayOfWeek.value - 1 // Пн = 1 → сдвиг 0
+internal fun monthGrid(today: LocalDate): List<List<LocalDate?>> {
+    val month = YearMonth.from(today)
+    val leading = today.dayOfWeek.value - 1 // Пн = 1 → сдвиг 0
     val cells = MutableList<LocalDate?>(leading) { null }
-    repeat(days) { cells.add(first.plusDays(it.toLong())) }
-    // добиваем последнюю неделю пустыми ячейками до полных 7
+    for (day in 1..month.lengthOfMonth()) {
+        cells.add(month.atDay(day))
+    }
     while (cells.size % 7 != 0) cells.add(null)
     return cells.chunked(7)
 }

@@ -72,18 +72,13 @@ fun SettingsScreen(
                     .padding(horizontal = Space.l, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Трекер кофеина", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        text = if (settings.enabled) {
-                            "${settings.targetMg} мг в день"
-                        } else {
-                            "Дневная норма и напоминания о времени приёма"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                // Только название и выключатель: норма и расписание принадлежат
+                // настройкам самого трекера — здесь они пересказывались второй раз.
+                Text(
+                    "Трекер кофеина",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
                 Spacer(Modifier.width(Space.m))
                 Switch(
                     checked = settings.enabled,

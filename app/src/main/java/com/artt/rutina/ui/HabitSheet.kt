@@ -76,7 +76,9 @@ fun HabitSheet(
     val keyboard = LocalSoftwareKeyboardController.current
 
     var name by remember { mutableStateOf(habit?.name.orEmpty()) }
-    var remind by remember { mutableStateOf(if (habit == null) true else habit.hour >= 0) }
+    // Новое дело начинается с чистого листа: оба ползунка выключены, время и срок
+    // появляются только после включения (progressive disclosure).
+    var remind by remember { mutableStateOf(habit != null && habit.hour >= 0) }
     var hour by remember { mutableStateOf(if ((habit?.hour ?: -1) >= 0) habit!!.hour else 8) }
     var minute by remember { mutableStateOf(habit?.minute ?: 0) }
     var showPicker by remember { mutableStateOf(false) }
@@ -140,12 +142,13 @@ fun HabitSheet(
                 // У всех вариантов один паттерн выделения: выбран ровно один чип из четырёх.
                 // Раньше пресеты были чипами, а «Другое» — кнопкой с зелёным контуром,
                 // и понять, что именно выбрано, было нельзя.
-                FlowRow(
+                // Одна строка: в чипах только время, без слов «Утро/День/Вечер» —
+                // часы говорят сами за себя, а подписи не давали строке поместиться.
+                Row(
                     horizontalArrangement = Arrangement.spacedBy(Space.s),
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    PRESETS.forEach { (label, hm) ->
+                    PRESETS.forEach { (_, hm) ->
                         FilterChip(
                             selected = hour == hm.first && minute == hm.second && !showPicker,
                             onClick = {
@@ -153,7 +156,7 @@ fun HabitSheet(
                                 minute = hm.second
                                 showPicker = false
                             },
-                            label = { Text("$label ${"%02d:%02d".format(hm.first, hm.second)}") },
+                            label = { Text("%02d:%02d".format(hm.first, hm.second)) },
                             shape = Radius.field,
                             colors = selectionChipColors(),
                         )
@@ -167,8 +170,8 @@ fun HabitSheet(
                         onClick = { showPicker = true },
                         label = {
                             Text(
-                                if (isPreset) "Другое…"
-                                else String.format("Другое %02d:%02d", hour, minute),
+                                if (isPreset) "Другое"
+                                else String.format("%02d:%02d", hour, minute),
                             )
                         },
                         shape = Radius.field,

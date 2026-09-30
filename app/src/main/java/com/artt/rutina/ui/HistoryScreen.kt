@@ -172,11 +172,6 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Text(
-                text = "Последние 60 дней",
-                style = MaterialTheme.typography.titleMedium,
-            )
-
             HistoryGrid(
                 daySet = daySet,
                 today = today,
@@ -221,12 +216,14 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
 
 /** Тонкий разделитель: без него три значения сливались в одну строку текста. */
 
+private val DOW_LABELS = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
 /**
- * Календарь за 60 дней: колонка = неделя, строка = день недели (Пн сверху).
+ * Календарь текущего месяца в классической ориентации: строка = неделя,
+ * колонка = день недели (Пн слева, Вс справа), сверху — строка подписей дней недели,
+ * над ней — название месяца. Число стоит внутри клетки, как в бумажном календаре.
  * Клетки — квадраты, размер считается от доступного места (BoxWithConstraints),
  * поэтому сетка целиком помещается на экран при любом размере и не требует прокрутки.
- * Ориентация выбрана именно такая: тогда подписи месяцев над колонками совпадают
- * с неделями, к которым относятся.
  */
 @Composable
 private fun HistoryGrid(
@@ -235,23 +232,16 @@ private fun HistoryGrid(
     createdAt: LocalDate,
     modifier: Modifier = Modifier,
 ) {
-    val weeks = historyGrid(today, days = 60)
-    val monthFormat = DateTimeFormatter.ofPattern("LLL", Locale("ru"))
+    val weeks = monthGrid(today)
+    val monthTitle = today.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru")))
+        .replaceFirstChar { it.uppercase(Locale("ru")) }
     val gap = Radius.gridGap
-    val labels = monthLabels(weeks)
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val weekCount = weeks.size // колонки
-        // Клетка — квадрат, вписанный в доступное место: ограничена и шириной, и высотой.
-        // Верхняя граница нужна только чтобы на планшете ячейки не превращались в плитку.
-        val byWidth = (maxWidth - gap * (weekCount - 1)) / weekCount
-        // Из высоты вычитаем строку подписей месяцев и все межстрочные зазоры,
-        // иначе на низком экране сетка вылезала за пределы блока.
-        val labelRow = 16.dp
-        val byHeight = ((maxHeight - labelRow - gap * 7) / 7).coerceAtLeast(4.dp)
-        val cell = minOf(byWidth, byHeight, 72.dp).coerceAtLeast(4.dp)
-
-        val gridWidth = cell * weekCount + gap * (weekCount - 1)
+        val byWidth = (maxWidth - gap * 6) / 7
+        val byHeight = ((maxHeight - gap * 8) / 8).coerceAtLeast(4.dp)
+        val cell = minOf(byWidth, byHeight, 64.dp).coerceAtLeast(4.dp)
+        val gridWidth = cell * 7 + gap * 6
 
         Column(
             // Не fillMaxSize: сетка занимает ровно свою высоту и не собирает
@@ -260,39 +250,42 @@ private fun HistoryGrid(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(modifier = Modifier.width(gridWidth)) {
-                // Подписи месяцев: одна на колонку, ровно над своей неделей
-                Row {
-                    weeks.forEachIndexed { i, _ ->
+                Text(
+                    text = monthTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(Space.xs))
+
+                // Шапка дней недели
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    DOW_LABELS.forEach { dow ->
                         Box(
                             modifier = Modifier.width(cell),
-                            contentAlignment = Alignment.CenterStart,
+                            contentAlignment = Alignment.Center,
                         ) {
-                            labels[i]?.let { day ->
-                                Text(
-                                    text = day.format(monthFormat),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                )
-                            }
+                            Text(
+                                text = dow,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
                         }
-                        if (i != weeks.lastIndex) Spacer(Modifier.width(gap))
                     }
                 }
-                Spacer(Modifier.height(gap))
+                Spacer(Modifier.height(Space.xs))
 
-                // Строки — дни недели (Пн = 0)
+                // Строки-недели: внутри — дни Пн→Вс
                 Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                    repeat(7) { dayOfWeek ->
+                    weeks.forEach { week ->
                         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                            weeks.forEach { week ->
-                                val d = week.getOrNull(dayOfWeek)
+                            week.forEach { d ->
                                 val done = d != null && daySet.contains(d.toString())
                                 val isToday = d == today
                                 // дни до создания дела — пустые, а не «пропущенные»
                                 val beforeBirth = d != null &&
                                     createdAt != LocalDate.EPOCH && d.isBefore(createdAt)
+                                // Число месяца в клетке: календарь читается как настоящий
                                 Box(
                                     modifier = Modifier
                                         .size(cell)
@@ -318,7 +311,20 @@ private fun HistoryGrid(
                                                 Modifier
                                             },
                                         ),
-                                )
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (d != null && cell >= 20.dp) {
+                                        Text(
+                                            text = "${d.dayOfMonth}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (done) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

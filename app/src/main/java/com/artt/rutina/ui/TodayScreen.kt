@@ -44,7 +44,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -266,13 +266,13 @@ fun TodayScreen(
         },
         floatingActionButton = {
             // по центру снизу, как основное действие экрана
-            ExtendedFloatingActionButton(
+            // Компактный круг вместо широкой плашки: кнопка вторична, экран и так
+            // говорит «Добавить первое дело», когда дел нет.
+            SmallFloatingActionButton(
                 onClick = {
                     sheetHabit = null
                     sheetVisible = true
                 },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Добавить") },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 shape = Radius.fab,
@@ -283,7 +283,9 @@ fun TodayScreen(
                     focusedElevation = 2.dp,
                     hoveredElevation = 3.dp,
                 ),
-            )
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Добавить")
+            }
         },
     ) { padding ->
         // Экраны не прокручиваются: контент раскладывается по доступной высоте.
