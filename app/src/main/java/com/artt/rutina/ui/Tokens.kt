@@ -5,8 +5,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -67,17 +65,3 @@ internal fun rutinaSwitchColors() = SwitchDefaults.colors(
     checkedIconColor = MaterialTheme.colorScheme.onPrimary,
 )
 
-/**
- * Зачёркивание выполненного дела: текст остаётся читаемым, поэтому линия тоньше
- * обычной (2 dp) и приглушена. Толстая линия через название вместе с галкой и
- * серией — третий сигнал одного состояния, и он только мешает читать.
- */
-internal fun Modifier.softStrikeThrough(color: Color): Modifier = drawBehind {
-    val y = size.height * 0.58f
-    drawLine(
-        color = color,
-        start = Offset(0f, y),
-        end = Offset(size.width, y),
-        strokeWidth = 1.dp.toPx() * 0.8f,
-    )
-}

@@ -67,15 +67,15 @@ export ANDROID_HOME=/home/artt/Android/Sdk JAVA_HOME=/home/artt/.local/jdk/java-
 ./gradlew assembleRelease                   # release APK
 ```
 
-Готовые APK: `dist/Rutina-1.5.apk` (release, подписан собственным ключом),
-`dist/Rutina-1.5-debug.apk` (debug-ключ; ставится поверх прошлых debug-сборок)
+Готовые APK: `dist/Rutina-1.6.apk` (release, подписан собственным ключом),
+`dist/Rutina-1.6-debug.apk` (debug-ключ; ставится поверх прошлых debug-сборок)
 и `dist/Rutina-1.0-debug.apk`.
 
 **Установка на телефон.** Готовый APK — в разделе Releases:
 <https://github.com/arttvad9r/Rutina/releases/latest>. Скачивать файл и открывать
 на телефоне напрямую (GitHub отдаёт APK без блокировок). Папка `dist/` в git не
 попадает (см. `.gitignore`), поэтому обновлять ассет релиза нужно вручную:
-`gh release upload v1.5 dist/Rutina-1.5.apk --clobber`.
+`gh release upload v1.6 dist/Rutina-1.6.apk --clobber`.
 
 **Подпись.** Release подписывается ключом из `keystore/rutina-release.jks`
 (пароль — в `keystore/keystore.properties`, папка в `.gitignore` и не попадает в git).
@@ -97,7 +97,7 @@ export ANDROID_HOME=/home/artt/Android/Sdk JAVA_HOME=/home/artt/.local/jdk/java-
 Установка на телефон по кабелю:
 
 ```bash
-adb install -r dist/Rutina-1.5.apk
+adb install -r dist/Rutina-1.6.apk
 ```
 
 Технически: Kotlin 2.1, Jetpack Compose (Material 3), Room, minSdk 26 (Android 8+),

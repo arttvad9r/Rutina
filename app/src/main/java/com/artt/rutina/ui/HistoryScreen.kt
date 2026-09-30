@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,7 +89,6 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
 
     val daySet = days.map { it.toString() }.toSet()
     val today = LocalDate.now()
-    val last30 = (0 until 30).count { daySet.contains(today.minusDays(it.toLong()).toString()) }
     val streak = streakOf(daySet, today)
     val best = bestStreak(daySet, today)
 
@@ -165,7 +163,14 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
             // экране не возникает провал между статистикой и календарём.
             verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
-            StatsCard(streak = streak, best = best, last30 = last30)
+            // Серия и рекорд — одной строкой, без карточки и без «N/30 за 30 дней»:
+            // плотность отметок и так видна на календаре ниже, третий способ
+            // показывать одни и те же дни только утяжеляет экран.
+            Text(
+                text = "Серия ${daysWord(streak)} · Рекорд ${daysWord(best)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             Text(
                 text = "Последние 60 дней",
@@ -177,12 +182,6 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
                 today = today,
                 createdAt = createdAt,
                 modifier = Modifier.fillMaxWidth(),
-            )
-
-            Text(
-                text = "закрашено — отмечено · серый — пропущено · рамка — сегодня",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             val recent = days.sortedDescending().take(MAX_RECENT)
@@ -219,77 +218,8 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
     }
 }
 
-/** Серия, рекорд и отметки за 30 дней — три равные колонки с разделителями. */
-@Composable
-private fun StatsCard(streak: Int, best: Int, last30: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .padding(vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            StatColumn(
-                value = if (streak == 0) "—" else daysWord(streak),
-                label = "серия",
-                modifier = Modifier.weight(1f),
-            )
-            StatDivider()
-            StatColumn(
-                value = if (best == 0) "—" else daysWord(best),
-                label = "рекорд",
-                modifier = Modifier.weight(1f),
-            )
-            StatDivider()
-            StatColumn(
-                value = "$last30/30",
-                label = "за 30 дней",
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatColumn(
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
 
 /** Тонкий разделитель: без него три значения сливались в одну строку текста. */
-@Composable
-private fun StatDivider() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(26.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant),
-    )
-}
 
 /**
  * Календарь за 60 дней: колонка = неделя, строка = день недели (Пн сверху).

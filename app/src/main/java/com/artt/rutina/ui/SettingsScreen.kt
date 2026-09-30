@@ -76,18 +76,7 @@ fun SettingsScreen(
                     Text("Трекер кофеина", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         text = if (settings.enabled) {
-                            // Окно приёмов, а не подъём–сон: «до сна» — не время приёма,
-                            // и такая подпись вводила в заблуждение.
-                            "Норма ${settings.targetMg} мг · " +
-                                CaffeineLogic.timeOf(settings.wakeMinutes).format(TIME_FORMAT) +
-                                "–" +
-                                CaffeineLogic.timeOf(
-                                    CaffeineLogic.plan(
-                                        targetMg = settings.targetMg,
-                                        wakeMinutes = settings.wakeMinutes,
-                                        bedtimeMinutes = settings.bedtimeMinutes,
-                                    ).schedule.lastAllowedMinutes,
-                                ).format(TIME_FORMAT)
+                            "${settings.targetMg} мг в день"
                         } else {
                             "Дневная норма и напоминания о времени приёма"
                         },

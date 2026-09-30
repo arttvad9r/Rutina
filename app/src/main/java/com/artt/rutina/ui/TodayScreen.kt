@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -249,16 +250,8 @@ fun TodayScreen(
                     }
                 },
                 actions = {
-                    // Кофеин — только когда трекер включён: иначе иконка занимала бы
-                    // место в шапке у тех, кому он не нужен.
-                    if (caffeineSettings.enabled) {
-                        IconButton(onClick = onOpenCaffeine) {
-                            Icon(
-                                Icons.Filled.LocalCafe,
-                                contentDescription = "Трекер кофеина",
-                            )
-                        }
-                    }
+                    // Точка входа в кофеин — строка «Кофеин» на самом экране; иконка
+                    // в шапке дублировала её и забирала место у заголовка.
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             Icons.Filled.Settings,
@@ -329,14 +322,12 @@ fun TodayScreen(
                     ProgressCard(doneCount = doneCount, total = activeCount)
                 }
 
-                // Кофеин — одной строкой между прогрессом и делами: видно норму
-                // и сколько приёмов уже отмечено, отметить можно на своём экране.
+                // Кофеин — одной строкой между прогрессом и делами: точка входа
+                // в трекер, норма видна в самом трекере.
                 if (caffeineSettings.enabled) {
                     CaffeineRow(
                         targetMg = caffeineSettings.targetMg,
                         doneMg = caffeineTodayMg,
-                        doneCount = caffeineTodayCount,
-                        moments = CaffeineLogic.MOMENTS,
                         onClick = onOpenCaffeine,
                     )
                 }
@@ -348,13 +339,11 @@ fun TodayScreen(
                     verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.Top),
                 ) {
                     groupByPartOfDay(habits).forEach { (title, list) ->
-                        SectionHeader(title = title, count = list.size)
+                        SectionHeader(title = title)
                         list.forEach { habit ->
                             HabitCard(
                                 habit = habit,
                                 done = records[habit.id]?.contains(dayKey) == true,
-                                streak = streakOf(records[habit.id].orEmpty(), today),
-                                course = courseLabel(habit, today),
                                 // Делят свободное место поровну и сжимаются, если дел много;
                                 // при малом числе дел сохраняют естественную высоту
                                 // (fill = false), иначе карточки растягивались бы на пол-экрана.
@@ -374,13 +363,11 @@ fun TodayScreen(
                     // Курсы, у которых срок вышел: отмечать уже нечего, но можно продлить
                     // («Изменить») и заглянуть в историю отметок.
                     if (completed.isNotEmpty()) {
-                        SectionHeader(title = "Завершённые", count = completed.size)
+                        SectionHeader(title = "Завершённые")
                         completed.forEach { habit ->
                             HabitCard(
                                 habit = habit,
                                 done = records[habit.id]?.contains(dayKey) == true,
-                                streak = streakOf(records[habit.id].orEmpty(), today),
-                                course = "",
                                 finished = true,
                                 modifier = Modifier.weight(1f, fill = false),
                                 onToggle = {},
@@ -472,42 +459,29 @@ private fun ProgressCard(doneCount: Int, total: Int) {
                     },
                 )
                 Spacer(Modifier.weight(1f))
-                // Подпись справа — вспомогательная: приглушена, чтобы не спорить с
-                // главным «Всё сделано». Фраза про «не думать» осталась, но ушла
-                // на второй план.
-                Text(
-                    text = if (allDone) "можно не думать об этом" else "за день",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-
-            // Сегменты вместо полоски: видно ровно столько дел, сколько их есть.
-            // Раньше рядом с полоской жила отдельная зелёная точка — читалось как два индикатора.
-            // Ширина сегмента фиксированная, иначе растянутый ряд снова выглядит полоской.
-            // При большом числе дел сегменты превращаются в пунктир — тогда лучше без них:
-            // «16 из 16» в тексте понятнее.
-            if (!allDone && total in 1..12) {
-                Spacer(Modifier.height(Space.s))
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    repeat(total) { i ->
+                // Тонкая короткая линия: цифры уже говорят «сколько сделано», линия
+                // только намекает на ход дня, не пересказывая её второй раз.
+                if (!allDone && total > 0) {
+                    Box(
+                        modifier = Modifier
+                            .width(48.dp)
+                            .height(3.dp)
+                            .clip(Radius.segment)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
                         Box(
                             modifier = Modifier
-                                .width(22.dp)
-                                .height(5.dp)
-                                .clip(Radius.segment)
-                                .background(
-                                    if (i < doneCount) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                ),
+                                .fillMaxWidth(doneCount / total.toFloat())
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary),
                         )
                     }
                 }
             }
+
+            // Сегменты при частичном выполнении убраны: «2 из 4» и так читается
+            // мгновенно, второй индикатор пересказывал тот же факт.
         }
     }
 }
@@ -516,11 +490,9 @@ private fun ProgressCard(doneCount: Int, total: Int) {
 private fun CaffeineRow(
     targetMg: Int,
     doneMg: Int,
-    doneCount: Int,
-    moments: Int,
     onClick: () -> Unit,
 ) {
-    val allDone = doneCount >= moments
+    val allDone = doneMg >= targetMg
     // Виджет состояния, а не ещё одно дело: та же карточка, но ниже и без акцентной
     // заливки при выполнении — иначе строка читается как routine item и спорит со
     // списком дел. Акцент остаётся только в иконке и цифрах.
@@ -533,52 +505,38 @@ private fun CaffeineRow(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.LocalCafe,
-                    contentDescription = null,
-                    modifier = Modifier.size(IconSize.caption),
-                    tint = if (allDone) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Spacer(Modifier.width(Space.s))
-                Text(
-                    text = "Кофеин",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "$doneMg из $targetMg мг",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (allDone) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            if (!allDone) {
-                Spacer(Modifier.height(Space.xs))
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    repeat(moments) { i ->
-                        Box(
-                            modifier = Modifier
-                                .width(22.dp)
-                                .height(5.dp)
-                                .clip(Radius.segment)
-                                .background(
-                                    if (i < doneCount) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                        )
-                    }
-                }
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Space.l, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.LocalCafe,
+                contentDescription = null,
+                modifier = Modifier.size(IconSize.caption),
+                tint = if (allDone) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Spacer(Modifier.width(Space.s))
+            Text(
+                text = "Кофеин",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "$doneMg мг",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (allDone) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
         }
     }
 }
@@ -666,33 +624,21 @@ private fun EmptyState(onAdd: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SectionHeader(title: String, count: Int) {
-    Row(
+private fun SectionHeader(title: String) {
+    Text(
+        text = title.uppercase(Locale("ru")),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp, bottom = 0.dp, start = 4.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title.uppercase(Locale("ru")),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.outline,
-        )
-    }
+    )
 }
 
 @Composable
 private fun HabitCard(
     habit: Habit,
     done: Boolean,
-    streak: Int,
-    course: String,
     modifier: Modifier = Modifier,
     finished: Boolean = false,
     onToggle: () -> Unit,
@@ -810,19 +756,10 @@ private fun HabitCard(
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
                                 },
-                                // Зачёркивание тонкое и приглушённое: галка и серия уже
-                                // сообщают «выполнено», толстая линия мешала читать название.
+                                // Без зачёркивания: состояние «выполнено» однозначно
+                                // читается по зелёной галке, линия только мешала названию.
                                 maxLines = 1,
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .softStrikeThrough(
-                                        if (done) {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                                .copy(alpha = 0.55f)
-                                        } else {
-                                            Color.Transparent
-                                        },
-                                    ),
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                             if (habit.hour >= 0) {
                                 Spacer(Modifier.width(Space.s))
@@ -842,15 +779,8 @@ private fun HabitCard(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
-                            // Тонкое зачёркивание вместо LineThrough: см. Tokens.
+                            // Без зачёркивания: см. компактный режим выше.
                             maxLines = 1,
-                            modifier = Modifier.softStrikeThrough(
-                                if (done) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                } else {
-                                    Color.Transparent
-                                },
-                            ),
                         )
                         Spacer(Modifier.height(1.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -889,20 +819,6 @@ private fun HabitCard(
                                     text = "курс завершён",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else if (course.isNotEmpty()) {
-                                Spacer(Modifier.width(Space.s))
-                                Text(
-                                    text = course,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            } else if (streak > 1) {
-                                Spacer(Modifier.width(Space.s))
-                                Text(
-                                    text = "${daysWord(streak)} подряд",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             }
                         }

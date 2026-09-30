@@ -61,7 +61,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale("ru"))
-private val DAY_FORMAT = DateTimeFormatter.ofPattern("d MMMM", Locale("ru"))
+private val DAY_SHORT_FORMAT = DateTimeFormatter.ofPattern("d MMM", Locale("ru"))
 
 /**
  * Экран трекера кофеина: норма, разбивка на приёмы, расписание, таймер и история.
@@ -128,14 +128,7 @@ fun CaffeineScreen(
                     }
                 },
                 title = {
-                    Column {
-                        Text("Кофеин", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "норма ${settings.targetMg} мг · ${plan.doses.size} приёма",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text("Кофеин", style = MaterialTheme.typography.titleMedium)
                 },
                 actions = {
                     // Норма, подъём и сон — на отдельном экране: на этом нужны приёмы и таймер.
@@ -212,7 +205,7 @@ private fun TotalCard(total: Int, target: Int, doneCount: Int, moments: Int) {
             )
             Spacer(Modifier.width(Space.s))
             Text(
-                text = if (allDone) "дневная норма выполнена" else "дневная норма",
+                text = if (allDone) "норма выполнена" else "норма на день",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 3.dp),
@@ -313,13 +306,6 @@ private fun DosesCard(
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
-                        modifier = Modifier.softStrikeThrough(
-                            if (done) {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            } else {
-                                Color.Transparent
-                            },
-                        ),
                     )
                     Spacer(Modifier.weight(1f))
                     if (done) {
@@ -350,22 +336,6 @@ private fun DosesCard(
                     shape = Radius.field,
                 ) {
                     Text("Отметить ${doses[todayIntakes.size]} мг")
-                }
-            } else {
-                Spacer(Modifier.height(Space.s))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(IconSize.caption),
-                    )
-                    Spacer(Modifier.width(Space.s))
-                    Text(
-                        text = "Норма на сегодня выполнена",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
                 }
             }
         }
@@ -514,7 +484,7 @@ private fun HistoryCard(intakes: List<CaffeineIntake>, today: LocalDate) {
     ) {
         Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
             Text(
-                text = "Последние дни",
+                text = "История",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -527,17 +497,17 @@ private fun HistoryCard(intakes: List<CaffeineIntake>, today: LocalDate) {
                 )
             } else {
                 byDay.forEach { (date, list) ->
-                    val isToday = date == today
+                    val isTodayRow = date == today
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(28.dp),
+                            .height(26.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (isToday) "Сегодня" else date.format(DAY_FORMAT),
+                            text = if (isTodayRow) "Сегодня" else date.format(DAY_SHORT_FORMAT),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isToday) {
+                            color = if (isTodayRow) {
                                 MaterialTheme.colorScheme.onSurface
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
