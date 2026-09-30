@@ -73,6 +73,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.artt.rutina.RutinaApp
 import com.artt.rutina.data.Habit
+import com.artt.rutina.data.courseLabel
+import com.artt.rutina.data.finishedOn
+import com.artt.rutina.data.habitOnDay
 import com.artt.rutina.notif.Reminders
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -120,13 +123,18 @@ fun TodayScreen(
     val vm = mainViewModel()
     val snapshot by vm.snapshot.collectAsState()
 
-    val habits = snapshot?.habits ?: emptyList()
+    val allHabits = snapshot?.habits ?: emptyList()
     val records = snapshot?.records ?: emptyMap()
 
     val today = LocalDate.now()
     val shownDay = vm.day
     val isToday = shownDay == today
     val dayKey = shownDay.toString()
+
+    // Дела на показанный день. Курс, у которого срок уже прошёл, в список не попадает —
+    // такие дела уезжают вниз, в группу «Завершённые»: из рутины они ушли, но история нужна.
+    val habits = allHabits.filter { habitOnDay(it, shownDay) }
+    val completed = allHabits.filter { finishedOn(it, shownDay) }
 
     var sheetHabit by remember { mutableStateOf<Habit?>(null) }
     var sheetVisible by remember { mutableStateOf(false) }
@@ -225,7 +233,7 @@ fun TodayScreen(
                 )
             }
 
-            if (habits.isEmpty()) {
+            if (allHabits.isEmpty()) {
                 EmptyState(
                     onAdd = {
                         sheetHabit = null
@@ -234,7 +242,11 @@ fun TodayScreen(
                     modifier = Modifier.weight(1f),
                 )
             } else {
-                ProgressCard(doneCount = doneCount, total = activeCount)
+                // Прогресс дня показываем только когда есть что отмечать. Если все дела —
+                // завершённые курсы, карточка прогресса с «Все дела на паузе» соврала бы.
+                if (habits.isNotEmpty()) {
+                    ProgressCard(doneCount = doneCount, total = activeCount)
+                }
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -249,11 +261,36 @@ fun TodayScreen(
                                 habit = habit,
                                 done = records[habit.id]?.contains(dayKey) == true,
                                 streak = streakOf(records[habit.id].orEmpty(), today),
+                                course = courseLabel(habit, today),
                                 // Делят свободное место поровну и сжимаются, если дел много;
                                 // при малом числе дел сохраняют естественную высоту
                                 // (fill = false), иначе карточки растягивались бы на пол-экрана.
                                 modifier = Modifier.weight(1f, fill = false),
                                 onToggle = { vm.toggle(habit.id) },
+                                onOpenHistory = { onOpenHistory(habit.id) },
+                                onEdit = {
+                                    sheetHabit = habit
+                                    sheetVisible = true
+                                },
+                                onToggleActive = { vm.setActive(habit, !habit.active) },
+                                onTestNotification = { vm.testNotification(habit) },
+                            )
+                        }
+                    }
+
+                    // Курсы, у которых срок вышел: отмечать уже нечего, но можно продлить
+                    // («Изменить») и заглянуть в историю отметок.
+                    if (completed.isNotEmpty()) {
+                        SectionHeader(title = "Завершённые", count = completed.size)
+                        completed.forEach { habit ->
+                            HabitCard(
+                                habit = habit,
+                                done = records[habit.id]?.contains(dayKey) == true,
+                                streak = streakOf(records[habit.id].orEmpty(), today),
+                                course = "",
+                                finished = true,
+                                modifier = Modifier.weight(1f, fill = false),
+                                onToggle = {},
                                 onOpenHistory = { onOpenHistory(habit.id) },
                                 onEdit = {
                                     sheetHabit = habit
@@ -273,8 +310,8 @@ fun TodayScreen(
         HabitSheet(
             habit = sheetHabit,
             onDismiss = { sheetVisible = false },
-            onSave = { name, hour, minute ->
-                vm.saveHabit(sheetHabit, name, hour, minute)
+            onSave = { name, hour, minute, durationDays ->
+                vm.saveHabit(sheetHabit, name, hour, minute, durationDays)
                 sheetVisible = false
             },
             onDelete = {
@@ -464,7 +501,9 @@ private fun HabitCard(
     habit: Habit,
     done: Boolean,
     streak: Int,
+    course: String,
     modifier: Modifier = Modifier,
+    finished: Boolean = false,
     onToggle: () -> Unit,
     onOpenHistory: () -> Unit,
     onEdit: () -> Unit,
@@ -522,22 +561,28 @@ private fun HabitCard(
                         .background(circleColor)
                         .border(
                             width = 1.5.dp,
-                            color = if (done) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outline
+                            color = when {
+                                finished -> MaterialTheme.colorScheme.outlineVariant
+                                done -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.outline
                             },
                             shape = CircleShape,
                         )
-                        .clickable(onClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onToggle()
-                        })
-                        .semantics {
-                            contentDescription = if (done) {
-                                "${habit.name}: отмечено. Нажми, чтобы снять отметку"
+                        .then(
+                            if (finished) {
+                                Modifier
                             } else {
-                                "${habit.name}: не отмечено. Нажми, чтобы отметить"
+                                Modifier.clickable(onClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onToggle()
+                                })
+                            },
+                        )
+                        .semantics {
+                            contentDescription = when {
+                                finished -> "${habit.name}: курс завершён"
+                                done -> "${habit.name}: отмечено. Нажми, чтобы снять отметку"
+                                else -> "${habit.name}: не отмечено. Нажми, чтобы отметить"
                             }
                         },
                     contentAlignment = Alignment.Center,
@@ -627,6 +672,22 @@ private fun HabitCard(
                                     text = "на паузе",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.secondary,
+                                )
+                            } else if (finished) {
+                                // Срок вышел: напоминать и отмечать уже нечего, но дело
+                                // остаётся внизу списка, пока его не продлят или не удалят.
+                                Spacer(Modifier.width(Space.s))
+                                Text(
+                                    text = "курс завершён",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else if (course.isNotEmpty()) {
+                                Spacer(Modifier.width(Space.s))
+                                Text(
+                                    text = course,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             } else if (streak > 1) {
                                 Spacer(Modifier.width(Space.s))

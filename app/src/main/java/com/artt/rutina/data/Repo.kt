@@ -24,13 +24,14 @@ class Repo(private val db: RutinaDb) {
 
     suspend fun habit(id: Long): Habit? = db.habits().byId(id)
 
-    suspend fun create(name: String, hour: Int, minute: Int): Long =
+    suspend fun create(name: String, hour: Int, minute: Int, durationDays: Int = NO_LIMIT): Long =
         db.habits().insert(
             Habit(
                 name = name.trim(),
                 hour = hour,
                 minute = minute,
                 sortOrder = db.habits().all().size,
+                durationDays = durationDays,
             ),
         )
 

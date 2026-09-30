@@ -41,6 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.artt.rutina.data.NO_LIMIT
+import com.artt.rutina.data.courseStatusText
+import com.artt.rutina.data.pluralDays
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -65,6 +68,7 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
     var hour by remember { mutableStateOf(-1) }
     var minute by remember { mutableStateOf(0) }
     var createdAt by remember { mutableStateOf(LocalDate.EPOCH) }
+    var durationDays by remember { mutableStateOf(NO_LIMIT) }
     var days by remember { mutableStateOf<List<LocalDate>>(emptyList()) }
 
     LaunchedEffect(habitId) {
@@ -72,6 +76,7 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
             habitName = it.name
             hour = it.hour
             minute = it.minute
+            durationDays = it.durationDays
             // день создания: дни до него не показываем как «пропущенные»
             createdAt = runCatching {
                 java.time.Instant.ofEpochMilli(it.createdAt)
@@ -124,6 +129,20 @@ fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
                             } else {
                                 Text(
                                     text = "без напоминания",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Срок курса: без него «0/30» у закончившегося курса читается
+                            // как «забросил», хотя дело просто дошло до конца.
+                            if (durationDays > NO_LIMIT) {
+                                Spacer(Modifier.width(Space.s))
+                                Text(
+                                    text = courseStatusText(
+                                        start = createdAt,
+                                        durationDays = durationDays,
+                                        day = today,
+                                    ),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

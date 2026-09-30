@@ -37,8 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.artt.rutina.data.Habit
+import com.artt.rutina.data.NO_LIMIT
+import com.artt.rutina.data.pluralDays
 
 /** Готовые варианты времени: показываются как чипы, как и «Другое». */
 private val PRESETS = listOf(
@@ -47,13 +50,26 @@ private val PRESETS = listOf(
     "Вечер" to (22 to 0),
 )
 
+/**
+ * Готовые сроки курса. «Своё» значение открывает ввод числа дней — тот же приём,
+ * что и с временем: один тип компонента и один паттерн выделения на все варианты.
+ */
+private val DURATIONS = listOf(
+    "7 дней" to 7,
+    "30 дней" to 30,
+    "90 дней" to 90,
+)
+
+/** Сроки, которые вводятся вручную, — подсказки для быстрого заполнения. */
+private val CUSTOM_HINTS = listOf(14, 21, 60, 180)
+
 /** Добавление и редактирование дела. Всё содержимое компактное — укладывается на один экран. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HabitSheet(
     habit: Habit?,
     onDismiss: () -> Unit,
-    onSave: (name: String, hour: Int, minute: Int) -> Unit,
+    onSave: (name: String, hour: Int, minute: Int, durationDays: Int) -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -65,6 +81,17 @@ fun HabitSheet(
     var minute by remember { mutableStateOf(habit?.minute ?: 0) }
     var showPicker by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+
+    // Срок курса. null в duration = «без ограничений»; custom — поле ручного ввода.
+    var limited by remember { mutableStateOf((habit?.durationDays ?: NO_LIMIT) > 0) }
+    var duration by remember { mutableStateOf((habit?.durationDays ?: 30).takeIf { it > 0 }) }
+    var custom by remember { mutableStateOf(false) }
+    var customText by remember {
+        mutableStateOf(
+            ((habit?.durationDays ?: 0).takeIf { it > 0 && DURATIONS.none { d -> d.second == it } })
+                ?.toString().orEmpty(),
+        )
+    }
 
     // Клавиатура не открывается сама: только когда пользователь сам поставит курсор в поле.
 
@@ -150,6 +177,92 @@ fun HabitSheet(
                 }
             }
 
+            Spacer(Modifier.height(Space.m))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Ограничить срок", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.weight(1f))
+                Switch(
+                    checked = limited,
+                    onCheckedChange = {
+                        limited = it
+                        if (it && duration == null) duration = 30
+                        if (!it) custom = false
+                    },
+                )
+            }
+
+            if (limited) {
+                Spacer(Modifier.height(Space.s))
+                // Один паттерн выделения на все варианты: пресеты и «Своё» — чипы одного типа.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                    verticalArrangement = Arrangement.spacedBy(Space.xs),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    DURATIONS.forEach { (label, days) ->
+                        FilterChip(
+                            selected = !custom && duration == days,
+                            onClick = {
+                                custom = false
+                                duration = days
+                            },
+                            label = { Text(label) },
+                            shape = Radius.field,
+                            colors = selectionChipColors(),
+                        )
+                    }
+                    FilterChip(
+                        selected = custom,
+                        onClick = { custom = true },
+                        label = {
+                            Text(
+                                customText.toIntOrNull()?.let { "$it ${pluralDays(it)}" }
+                                    ?: "Своё…",
+                            )
+                        },
+                        shape = Radius.field,
+                        colors = selectionChipColors(),
+                    )
+                }
+
+                if (custom) {
+                    Spacer(Modifier.height(Space.s))
+                    OutlinedTextField(
+                        value = customText,
+                        onValueChange = { raw -> customText = raw.filter { it.isDigit() }.take(4) },
+                        label = { Text("Дней") },
+                        singleLine = true,
+                        shape = Radius.field,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(Space.s))
+                    // Быстрые подсказки: набирать «180» пальцем по цифрам долго
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Space.s),
+                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        CUSTOM_HINTS.forEach { days ->
+                            FilterChip(
+                                selected = customText.toIntOrNull() == days,
+                                onClick = { customText = days.toString() },
+                                label = { Text(days.toString()) },
+                                shape = Radius.field,
+                                colors = selectionChipColors(),
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(Space.l))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (habit != null) {
@@ -177,9 +290,18 @@ fun HabitSheet(
                 Button(
                     onClick = {
                         keyboard?.hide()
-                        onSave(name.trim(), if (remind) hour else -1, minute)
+                        // «Ограничить срок» выключено → бессрочно; включено, но поле пустое
+                        // или ноль → тоже бессрочно, чтобы не заводить курс длиной в никуда.
+                        val days = if (!limited) {
+                            NO_LIMIT
+                        } else {
+                            (customText.toIntOrNull()?.takeIf { custom } ?: duration ?: 30)
+                                .coerceIn(1, 3650)
+                        }
+                        onSave(name.trim(), if (remind) hour else -1, minute, days)
                     },
-                    enabled = name.trim().isNotEmpty(),
+                    enabled = name.trim().isNotEmpty() &&
+                        (!limited || !custom || customText.toIntOrNull() != null),
                     shape = Radius.field,
                 ) {
                     Text(if (habit == null) "Добавить" else "Сохранить")

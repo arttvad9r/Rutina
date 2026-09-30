@@ -9,6 +9,8 @@ import android.content.Intent
 import android.os.Build
 import com.artt.rutina.MainActivity
 import com.artt.rutina.data.Habit
+import com.artt.rutina.data.finishedOn
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
@@ -54,7 +56,8 @@ object Reminders {
 
     fun schedule(context: Context, habit: Habit) {
         val alarm = context.getSystemService(AlarmManager::class.java) ?: return
-        if (habit.hour < 0 || !habit.active) {
+        // Курс, у которого срок вышел, замолкает сам: будильник на завтра уже не нужен.
+        if (habit.hour < 0 || !habit.active || finishedOn(habit, LocalDate.now())) {
             cancel(context, habit)
             return
         }

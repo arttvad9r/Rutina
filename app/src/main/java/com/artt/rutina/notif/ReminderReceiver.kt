@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.artt.rutina.RutinaApp
+import com.artt.rutina.data.finishedOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,12 +22,16 @@ class ReminderReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val habit = app.repo.habit(habitId)
-                if (habit != null && habit.active && habit.hour >= 0) {
-                    if (!app.repo.isDone(habitId, LocalDate.now())) {
-                        Notifier.post(context, habit, LocalDate.now())
+                val today = LocalDate.now()
+                if (habit != null && habit.active && habit.hour >= 0 && !finishedOn(habit, today)) {
+                    if (!app.repo.isDone(habitId, today)) {
+                        Notifier.post(context, habit, today)
                     }
                     // планируем на следующий день
                     Reminders.schedule(context, habit)
+                } else {
+                    // курс закончился — снимаем будильник, чтобы напоминания не тянулись дальше
+                    habit?.let { Reminders.cancel(context, it) }
                 }
             } finally {
                 pending.finish()

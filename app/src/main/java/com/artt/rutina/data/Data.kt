@@ -12,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /** Привычка / дело в рутине. */
@@ -25,6 +27,11 @@ data class Habit(
     val active: Boolean = true,
     val sortOrder: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
+    /**
+     * Сколько дней длится дело (курс), 0 = без ограничений.
+     * Считается от дня создания: курс на 30 дней, начатый 1-го, идёт по 30-е.
+     */
+    val durationDays: Int = NO_LIMIT,
 )
 
 /** Отметка о выполнении за конкретный день (день в формате ISO yyyy-MM-dd). */
@@ -83,7 +90,7 @@ interface RecordDao {
     suspend fun forgetHabit(habitId: Long)
 }
 
-@Database(entities = [Habit::class, Record::class], version = 1, exportSchema = false)
+@Database(entities = [Habit::class, Record::class], version = 2, exportSchema = false)
 abstract class RutinaDb : RoomDatabase() {
     abstract fun habits(): HabitDao
     abstract fun records(): RecordDao
@@ -92,13 +99,28 @@ abstract class RutinaDb : RoomDatabase() {
         @Volatile
         private var instance: RutinaDb? = null
 
+        /**
+         * Версия 1 → 2: у дела появилась длительность курса.
+         * Существующие дела становятся бессрочными — их поведение не меняется.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE habits ADD COLUMN durationDays INTEGER NOT NULL DEFAULT $NO_LIMIT",
+                )
+            }
+        }
+
         fun get(context: Context): RutinaDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     RutinaDb::class.java,
                     "rutina.db",
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
     }
 }

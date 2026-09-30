@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.artt.rutina.RutinaApp
 import com.artt.rutina.data.Habit
 import com.artt.rutina.data.Repo
+import com.artt.rutina.data.habitOnDay
 import com.artt.rutina.notif.Notifier
 import com.artt.rutina.notif.Reminders
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,12 +54,19 @@ class MainViewModel(
         }
     }
 
-    fun saveHabit(existing: Habit?, name: String, hour: Int, minute: Int) {
+    fun saveHabit(existing: Habit?, name: String, hour: Int, minute: Int, durationDays: Int) {
         viewModelScope.launch {
             val id = if (existing == null) {
-                repo.create(name, hour, minute)
+                repo.create(name, hour, minute, durationDays)
             } else {
-                repo.update(existing.copy(name = name.trim(), hour = hour, minute = minute))
+                repo.update(
+                    existing.copy(
+                        name = name.trim(),
+                        hour = hour,
+                        minute = minute,
+                        durationDays = durationDays,
+                    ),
+                )
                 existing.id
             }
             repo.habit(id)?.let { Reminders.schedule(context, it) }
@@ -73,6 +81,14 @@ class MainViewModel(
             if (!active) Notifier.clear(context, habit.id)
         }
     }
+
+    /**
+     * Дела, актуальные для показанного дня: созданные не позже этого дня и с незаконченным
+     * курсом. Завершённые курсы сюда не попадают — поэтому дело с истёкшим сроком само
+     * исчезает из списка, а его история остаётся доступной в разделе «Завершённые».
+     */
+    fun habitsForDay(day: LocalDate): List<Habit> =
+        (snapshot.value?.habits ?: emptyList()).filter { habitOnDay(it, day) }
 
     fun delete(habitId: Long) {
         viewModelScope.launch {
