@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.rutina.data.CaffeineIntake
@@ -151,7 +152,6 @@ fun CaffeineScreen(
         ) {
             TotalCard(
                 total = total,
-                target = settings.targetMg,
                 doneCount = doneCount,
                 moments = plan.doses.size,
             )
@@ -160,26 +160,23 @@ fun CaffeineScreen(
                 doses = plan.doses,
                 times = plan.schedule.times,
                 todayIntakes = todayIntakes,
-                onAdd = { onAddIntake(plan.doses.getOrElse(doneCount) { CaffeineLogic.STEP_MG }) },
+                onAdd = { onAddIntake(it) },
                 onRemove = onRemoveIntake,
             )
 
-            // Таймер нужен, пока есть что отсчитывать. Когда все приёмы отмечены и
-            // отсчёта нет, карточка исчезает целиком: строка состояния уже есть в
-            // «Приёмах сегодня», и второй раз то же самое только шумит.
-            if (doneCount < plan.doses.size || timerActive) {
-                TimerCard(
-                    timerActive = timerActive,
-                    remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
-                    slot = settings.timerSlot,
-                    suggestedMinutes = suggestedMinutes,
-                    recommendedMinutes = recommendedMinutes,
-                    // slot — индекс только что отмеченного приёма: после первого это 0,
-                    // поэтому подпись «после N-го» считается как slot + 1.
-                    onStart = { minutes -> onStartTimer(minutes, doneCount - 1) },
-                    onCancel = onCancelTimer,
-                )
-            }
+            // Таймер всегда доступен: даже при выполненной норме может хотеться
+            // отсчитать интервал — блокировать его незачем.
+            TimerCard(
+                timerActive = timerActive,
+                remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
+                slot = settings.timerSlot,
+                suggestedMinutes = suggestedMinutes,
+                recommendedMinutes = recommendedMinutes,
+                // slot — индекс только что отмеченного приёма: после первого это 0,
+                // поэтому подпись «после N-го» считается как slot + 1.
+                onStart = { minutes -> onStartTimer(minutes, doneCount - 1) },
+                onCancel = onCancelTimer,
+            )
 
             HistoryCard(intakes = intakes, today = today)
         }
@@ -187,49 +184,19 @@ fun CaffeineScreen(
 }
 
 @Composable
-private fun TotalCard(total: Int, target: Int, doneCount: Int, moments: Int) {
+private fun TotalCard(total: Int, doneCount: Int, moments: Int) {
     val allDone = doneCount >= moments
-    // Заголовок состояния вместо «карточки в карточке»: норма и статус в одной
-    // строке, сегменты под ней. Раньше сверху жила ещё зелёная плашка на всю ширину,
-    // и экран читался как четыре вложенных контейнера.
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = "$total / $target мг",
-                style = MaterialTheme.typography.titleLarge,
-                color = if (allDone) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-            )
-            Spacer(Modifier.width(Space.s))
-            Text(
-                text = if (allDone) "норма выполнена" else "норма на день",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-        }
-        if (!allDone) {
-            Spacer(Modifier.height(Space.s))
-            // Сегменты по приёмам: видно, сколько из них уже отмечено.
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                repeat(moments) { i ->
-                    Box(
-                        modifier = Modifier
-                            .width(22.dp)
-                            .height(5.dp)
-                            .clip(Radius.segment)
-                            .background(
-                                if (i < doneCount) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                    )
-                }
-            }
-        }
-    }
+    // Только сумма за день: сколько приёмов закрыто — видно по галочкам в «Приёмах
+    // сегодня», норма живёт в настройках. Заголовок не пересказывает их второй раз.
+    Text(
+        text = "$total мг",
+        style = MaterialTheme.typography.titleLarge,
+        color = if (allDone) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+    )
 }
 
 @Composable
@@ -237,7 +204,7 @@ private fun DosesCard(
     doses: List<Int>,
     times: List<Int>,
     todayIntakes: List<CaffeineIntake>,
-    onAdd: () -> Unit,
+    onAdd: (Int) -> Unit,
     onRemove: (Long) -> Unit,
 ) {
     Card(
@@ -326,16 +293,39 @@ private fun DosesCard(
                 }
             }
 
-            // После завершения огромная disabled-кнопка только шумит: она выглядит как
-            // действие, которое почему-то недоступно. Вместо неё — состояние.
+            // Доза не из шаблона: как у таймера — «− 100 мг +», кнопка «Отметить».
+            // Пресеты в настройках остаются быстрым путём, но больше не единственным.
             if (todayIntakes.size < doses.size) {
                 Spacer(Modifier.height(Space.s))
+                var mg by remember(todayIntakes.size, doses) {
+                    mutableStateOf(doses.getOrElse(todayIntakes.size) { CaffeineLogic.STEP_MG })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                ) {
+                    StepperButton(Icons.Filled.Remove, "Меньше", enabled = true) {
+                        mg = (mg - CaffeineLogic.STEP_MG).coerceAtLeast(CaffeineLogic.STEP_MG)
+                    }
+                    Text(
+                        text = "$mg мг",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                    )
+                    StepperButton(Icons.Filled.Add, "Больше", enabled = true) {
+                        mg = (mg + CaffeineLogic.STEP_MG).coerceAtMost(CaffeineLogic.MAX_INTAKE_MG)
+                    }
+                }
+                Spacer(Modifier.height(Space.s))
                 Button(
-                    onClick = onAdd,
+                    onClick = { onAdd(mg) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = Radius.field,
                 ) {
-                    Text("Отметить ${doses[todayIntakes.size]} мг")
+                    Text("Отметить $mg мг")
                 }
             }
         }

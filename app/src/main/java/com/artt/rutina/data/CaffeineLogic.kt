@@ -24,6 +24,9 @@ object CaffeineLogic {
 
     const val MIN_TARGET = 50
     const val MAX_TARGET = 600
+
+    /** Верхняя граница разовой отметки на экране трекера. */
+    const val MAX_INTAKE_MG = 600
     const val DEFAULT_TARGET = 200
 
     /** Время сна и подъёма по умолчанию: 01:00 и 08:00. */

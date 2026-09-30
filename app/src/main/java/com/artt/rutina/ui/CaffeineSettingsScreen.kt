@@ -88,14 +88,7 @@ fun CaffeineSettingsScreen(
                     }
                 },
                 title = {
-                    Column {
-                        Text("Кофеин", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "настройки трекера",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text("Кофеин", style = MaterialTheme.typography.titleMedium)
                 },
             )
         },
@@ -132,15 +125,6 @@ fun CaffeineSettingsScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(Space.xs))
-                    // Одна динамическая строка вместо двух объяснений одной механики:
-                    // разбивку видно прямо под нормой.
-                    Text(
-                        text = "${settings.targetMg} мг → " +
-                            plan.doses.joinToString(" + ") + " мг",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 

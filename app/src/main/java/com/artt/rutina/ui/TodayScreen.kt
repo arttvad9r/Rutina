@@ -209,15 +209,18 @@ fun TodayScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 title = {
-                    // Шапка не «разваливается» на узком экране: заголовок и дата живут
-                    // в своей колонке, действия — справа. Навигация по дням ушла из
-                    // действий в строку с датой, оттуда же возврат на сегодня.
-                    Column {
+                    // Одна строка: «Рутина» слева, дата по центру между заголовком
+                    // и шестерёнкой. Шапка не «разваливается»: дата короче заголовка.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Text(
                             text = "Рутина",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
+                        Spacer(Modifier.weight(1f))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             DayChevron(
                                 icon = Icons.Filled.ChevronLeft,
@@ -328,6 +331,12 @@ fun TodayScreen(
                     CaffeineRow(
                         targetMg = caffeineSettings.targetMg,
                         doneMg = caffeineTodayMg,
+                        doneCount = caffeineTodayCount,
+                        moments = CaffeineLogic.plan(
+                            targetMg = caffeineSettings.targetMg,
+                            wakeMinutes = caffeineSettings.wakeMinutes,
+                            bedtimeMinutes = caffeineSettings.bedtimeMinutes,
+                        ).doses.size,
                         onClick = onOpenCaffeine,
                     )
                 }
@@ -490,6 +499,8 @@ private fun ProgressCard(doneCount: Int, total: Int) {
 private fun CaffeineRow(
     targetMg: Int,
     doneMg: Int,
+    doneCount: Int,
+    moments: Int,
     onClick: () -> Unit,
 ) {
     val allDone = doneMg >= targetMg
@@ -505,12 +516,8 @@ private fun CaffeineRow(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Space.l, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column(Modifier.padding(horizontal = Space.l, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Filled.LocalCafe,
                 contentDescription = null,
@@ -528,15 +535,35 @@ private fun CaffeineRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.weight(1f))
-            Text(
-                text = "$doneMg мг",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (allDone) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
+                Text(
+                    text = "$doneMg мг",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (allDone) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            // Чёрточки-отметки приёмов: тот же язык сегментов, что и «N из M»
+            // у дел. Цифры говорят дозу, чёрточки — сколько приёмов закрыто.
+            if (!allDone) {
+                Spacer(Modifier.height(Space.xs))
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    repeat(moments) { i ->
+                        Box(
+                            modifier = Modifier
+                                .width(22.dp)
+                                .height(5.dp)
+                                .clip(Radius.segment)
+                                .background(
+                                    if (i < doneCount) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                        )
+                    }
+                }
+            }
         }
     }
 }
