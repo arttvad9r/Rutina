@@ -365,7 +365,7 @@ fun HabitSheet(
 
 /** Единый вид выбранного состояния чипа времени. */
 @Composable
-private fun selectionChipColors() = FilterChipDefaults.filterChipColors(
+internal fun selectionChipColors() = FilterChipDefaults.filterChipColors(
     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
 )

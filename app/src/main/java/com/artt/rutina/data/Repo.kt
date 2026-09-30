@@ -57,4 +57,23 @@ class Repo(private val db: RutinaDb) {
         if (done) db.records().mark(Record(habitId, day.toString()))
         else db.records().unmark(habitId, day.toString())
     }
+
+    // --- Трекер кофеина ---
+
+    val caffeineIntakes: Flow<List<CaffeineIntake>> = db.caffeine().observeAll()
+
+    /** Настройки трекера; пока строки нет, отдаём значения по умолчанию (выключен). */
+    val caffeineSettings: Flow<CaffeineSettings> =
+        db.caffeine().observeSettings().map { it ?: CaffeineSettings() }
+
+    suspend fun caffeineSettingsNow(): CaffeineSettings =
+        db.caffeine().settings() ?: CaffeineSettings()
+
+    suspend fun saveCaffeineSettings(settings: CaffeineSettings) =
+        db.caffeine().saveSettings(settings.copy(id = 1))
+
+    suspend fun addCaffeine(day: LocalDate, mg: Int, at: Long = System.currentTimeMillis()) =
+        db.caffeine().insert(CaffeineIntake(day = day.toString(), at = at, mg = mg))
+
+    suspend fun removeCaffeine(id: Long) = db.caffeine().deleteById(id)
 }

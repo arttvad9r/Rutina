@@ -11,9 +11,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.artt.rutina.RutinaApp
+import com.artt.rutina.data.CaffeineSettings
+import com.artt.rutina.data.CaffeineLogic
 import com.artt.rutina.data.Habit
 import com.artt.rutina.data.Repo
 import com.artt.rutina.data.habitOnDay
+import com.artt.rutina.notif.CaffeineTimer
 import com.artt.rutina.notif.Notifier
 import com.artt.rutina.notif.Reminders
 import kotlinx.coroutines.flow.SharingStarted
@@ -101,6 +104,74 @@ class MainViewModel(
     /** Показать напоминание прямо сейчас — проверить, что уведомления доходят. */
     fun testNotification(habit: Habit) {
         Notifier.post(context, habit, LocalDate.now(), force = true)
+    }
+
+    // --- Трекер кофеина ---
+
+    val caffeineSettings = repo.caffeineSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(2_000), CaffeineSettings())
+
+    val caffeineIntakes = repo.caffeineIntakes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(2_000), emptyList())
+
+    /** Включить или выключить трекер кофеина (переключатель в настройках). */
+    fun setCaffeineEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(s.copy(enabled = enabled))
+        }
+    }
+
+    fun setCaffeineTarget(targetMg: Int) {
+        viewModelScope.launch {
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(
+                s.copy(targetMg = targetMg.coerceIn(CaffeineLogic.MIN_TARGET, CaffeineLogic.MAX_TARGET)),
+            )
+        }
+    }
+
+    fun setCaffeineBedtime(minutes: Int) {
+        viewModelScope.launch {
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(s.copy(bedtimeMinutes = minutes))
+        }
+    }
+
+    fun setCaffeineWake(minutes: Int) {
+        viewModelScope.launch {
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(s.copy(wakeMinutes = minutes))
+        }
+    }
+
+    /** Отметить приём кофеина: доза идёт по порядку из разбивки нормы. */
+    fun addCaffeine(mg: Int) {
+        viewModelScope.launch {
+            repo.addCaffeine(LocalDate.now(), mg)
+        }
+    }
+
+    fun removeCaffeine(id: Long) {
+        viewModelScope.launch { repo.removeCaffeine(id) }
+    }
+
+    /** Запустить таймер до следующего приёма. */
+    fun startCaffeineTimer(minutes: Int, slot: Int?) {
+        viewModelScope.launch {
+            val end = System.currentTimeMillis() + minutes * 60_000L
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(s.copy(timerEndMs = end, timerSlot = slot))
+            CaffeineTimer.schedule(context, end)
+        }
+    }
+
+    fun cancelCaffeineTimer() {
+        viewModelScope.launch {
+            val s = repo.caffeineSettingsNow()
+            repo.saveCaffeineSettings(s.copy(timerEndMs = null, timerSlot = null))
+            CaffeineTimer.cancel(context)
+        }
     }
 }
 

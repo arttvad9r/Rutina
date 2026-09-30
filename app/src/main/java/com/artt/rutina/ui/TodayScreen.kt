@@ -31,9 +31,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -71,7 +73,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.rutina.RutinaApp
+import com.artt.rutina.data.CaffeineLogic
 import com.artt.rutina.data.Habit
 import com.artt.rutina.data.courseLabel
 import com.artt.rutina.data.finishedOn
@@ -88,6 +92,8 @@ private val WEEKDAY_DAY_FORMAT = DateTimeFormatter.ofPattern("EEEE, d MMMM", Loc
 private sealed interface Screen {
     data object Today : Screen
     data class History(val habitId: Long) : Screen
+    data object Caffeine : Screen
+    data object Settings : Screen
 }
 
 @Composable
@@ -95,6 +101,7 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
     var screen by remember { mutableStateOf<Screen>(Screen.Today) }
     val context = LocalContext.current
     val app = context.applicationContext as RutinaApp
+    val vm = mainViewModel()
 
     // при запуске восстанавливаем будильники — система может снести их после обновления или перезагрузки
     LaunchedEffect(Unit) {
@@ -105,12 +112,42 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
         is Screen.Today -> TodayScreen(
             notificationsAllowed = notificationsAllowed,
             onOpenHistory = { screen = Screen.History(it) },
+            onOpenCaffeine = { screen = Screen.Caffeine },
+            onOpenSettings = { screen = Screen.Settings },
         )
 
         is Screen.History -> HistoryScreen(
             habitId = s.habitId,
             onBack = { screen = Screen.Today },
         )
+
+        is Screen.Settings -> {
+            val caffeineSettings by vm.caffeineSettings.collectAsStateWithLifecycle()
+            SettingsScreen(
+                settings = caffeineSettings,
+                onBack = { screen = Screen.Today },
+                onSetCaffeineEnabled = { vm.setCaffeineEnabled(it) },
+                onSetTarget = { vm.setCaffeineTarget(it) },
+            )
+        }
+
+        is Screen.Caffeine -> {
+            val caffeineSettings by vm.caffeineSettings.collectAsStateWithLifecycle()
+            val intakes by vm.caffeineIntakes.collectAsStateWithLifecycle()
+            CaffeineScreen(
+                settings = caffeineSettings,
+                intakes = intakes,
+                today = LocalDate.now(),
+                onBack = { screen = Screen.Today },
+                onSetTarget = { vm.setCaffeineTarget(it) },
+                onSetBedtime = { vm.setCaffeineBedtime(it) },
+                onSetWake = { vm.setCaffeineWake(it) },
+                onAddIntake = { vm.addCaffeine(it) },
+                onRemoveIntake = { vm.removeCaffeine(it) },
+                onStartTimer = { minutes, slot -> vm.startCaffeineTimer(minutes, slot) },
+                onCancelTimer = { vm.cancelCaffeineTimer() },
+            )
+        }
     }
 }
 
@@ -119,12 +156,19 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
 fun TodayScreen(
     notificationsAllowed: () -> Boolean,
     onOpenHistory: (Long) -> Unit,
+    onOpenCaffeine: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val vm = mainViewModel()
     val snapshot by vm.snapshot.collectAsState()
+    val caffeineSettings by vm.caffeineSettings.collectAsStateWithLifecycle()
+    val caffeineIntakes by vm.caffeineIntakes.collectAsStateWithLifecycle()
+    val caffeineToday = caffeineIntakes.filter { it.day == LocalDate.now().toString() }
 
     val allHabits = snapshot?.habits ?: emptyList()
     val records = snapshot?.records ?: emptyMap()
+    val caffeineTodayMg = caffeineToday.sumOf { it.mg }
+    val caffeineTodayCount = caffeineToday.size
 
     val today = LocalDate.now()
     val shownDay = vm.day
@@ -183,6 +227,22 @@ fun TodayScreen(
                             Icon(Icons.Filled.ChevronRight, contentDescription = "Следующий день")
                         }
                         TextButton(onClick = { vm.backToToday() }) { Text("Сегодня") }
+                    }
+                    // Кофеин — только когда трекер включён: иначе иконка занимала бы
+                    // место в шапке у тех, кому он не нужен.
+                    if (caffeineSettings.enabled) {
+                        IconButton(onClick = onOpenCaffeine) {
+                            Icon(
+                                Icons.Filled.LocalCafe,
+                                contentDescription = "Трекер кофеина",
+                            )
+                        }
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = "Настройки",
+                        )
                     }
                 },
             )
@@ -246,6 +306,18 @@ fun TodayScreen(
                 // завершённые курсы, карточка прогресса с «Все дела на паузе» соврала бы.
                 if (habits.isNotEmpty()) {
                     ProgressCard(doneCount = doneCount, total = activeCount)
+                }
+
+                // Кофеин — одной строкой между прогрессом и делами: видно норму
+                // и сколько приёмов уже отмечено, отметить можно на своём экране.
+                if (caffeineSettings.enabled) {
+                    CaffeineRow(
+                        targetMg = caffeineSettings.targetMg,
+                        doneMg = caffeineTodayMg,
+                        doneCount = caffeineTodayCount,
+                        moments = CaffeineLogic.MOMENTS,
+                        onClick = onOpenCaffeine,
+                    )
                 }
 
                 Column(
@@ -375,6 +447,84 @@ private fun ProgressCard(doneCount: Int, total: Int) {
                 Spacer(Modifier.height(Space.s))
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     repeat(total) { i ->
+                        Box(
+                            modifier = Modifier
+                                .width(22.dp)
+                                .height(5.dp)
+                                .clip(Radius.segment)
+                                .background(
+                                    if (i < doneCount) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CaffeineRow(
+    targetMg: Int,
+    doneMg: Int,
+    doneCount: Int,
+    moments: Int,
+    onClick: () -> Unit,
+) {
+    val allDone = doneCount >= moments
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = Radius.card,
+        colors = CardDefaults.cardColors(
+            containerColor = if (allDone) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = if (allDone) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(horizontal = Space.l, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.LocalCafe,
+                    contentDescription = null,
+                    modifier = Modifier.size(IconSize.caption),
+                    tint = if (allDone) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                Spacer(Modifier.width(Space.s))
+                Text(
+                    text = "Кофеин",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (allDone) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "$doneMg из $targetMg мг",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (allDone) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            if (!allDone) {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    repeat(moments) { i ->
                         Box(
                             modifier = Modifier
                                 .width(22.dp)
