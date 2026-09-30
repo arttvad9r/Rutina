@@ -53,7 +53,9 @@ private val LightColors = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE7E7E2),
 
     outline = Color(0xFF7A7F7C),
-    outlineVariant = Color(0xFFC4C8C2),
+    // было C4C8C2 — рамка вокруг каждой карточки читалась как «почти каждый контейнер
+    // обведён». Ослаблена до едва заметной: карточка отделяется от фона, но не кричит.
+    outlineVariant = Color(0xFFD6D9D3),
 
     error = Color(0xFF9E4B3E),
     onError = Color.White,
@@ -97,7 +99,8 @@ private val DarkColors = darkColorScheme(
     surfaceContainerHighest = Color(0xFF2E3338),
 
     outline = Color(0xFF6E7370),
-    outlineVariant = Color(0xFF3A3F42),
+    // Ослаблено вместе со светлой темой: рамка — разделитель, а не контур.
+    outlineVariant = Color(0xFF2B3034),
 
     error = Color(0xFFE0A199),
     onError = Color(0xFF3E1A14),

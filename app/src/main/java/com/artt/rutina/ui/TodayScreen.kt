@@ -71,7 +71,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.rutina.RutinaApp
@@ -86,14 +85,14 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val DAY_FORMAT = DateTimeFormatter.ofPattern("d MMMM", Locale("ru"))
 private val WEEKDAY_DAY_FORMAT = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale("ru"))
 
 private sealed interface Screen {
     data object Today : Screen
     data class History(val habitId: Long) : Screen
     data object Caffeine : Screen
-    data object CaffeineSettings : Screen
+    /** Настройки трекера помнят, откуда их открыли: из кофеина или из настроек. */
+    data class CaffeineSettings(val from: Screen) : Screen
     data object Settings : Screen
 }
 
@@ -139,7 +138,7 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
                 intakes = intakes,
                 today = LocalDate.now(),
                 onBack = { screen = Screen.Today },
-                onOpenSettings = { screen = Screen.CaffeineSettings },
+                onOpenSettings = { screen = Screen.CaffeineSettings(Screen.Caffeine) },
                 onAddIntake = { vm.addCaffeine(it) },
                 onRemoveIntake = { vm.removeCaffeine(it) },
                 onStartTimer = { minutes, slot -> vm.startCaffeineTimer(minutes, slot) },
@@ -151,7 +150,7 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
             val caffeineSettings by vm.caffeineSettings.collectAsStateWithLifecycle()
             CaffeineSettingsScreen(
                 settings = caffeineSettings,
-                onBack = { screen = Screen.Caffeine },
+                onBack = { screen = s.from },
                 onSetTarget = { vm.setCaffeineTarget(it) },
                 onSetWake = { vm.setCaffeineWake(it) },
                 onSetBedtime = { vm.setCaffeineBedtime(it) },
@@ -209,34 +208,47 @@ fun TodayScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 title = {
+                    // Шапка не «разваливается» на узком экране: заголовок и дата живут
+                    // в своей колонке, действия — справа. Навигация по дням ушла из
+                    // действий в строку с датой, оттуда же возврат на сегодня.
                     Column {
                         Text(
                             text = "Рутина",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
-                        Text(
-                            text = if (isToday) {
-                                "сегодня, ${today.format(DAY_FORMAT)}"
-                            } else {
-                                shownDay.format(WEEKDAY_DAY_FORMAT)
-                                    .replaceFirstChar { it.uppercase() }
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            DayChevron(
+                                icon = Icons.Filled.ChevronLeft,
+                                description = "Предыдущий день",
+                                onClick = { vm.shiftDay(-1) },
+                            )
+                            Text(
+                                text = shownDay.format(WEEKDAY_DAY_FORMAT)
+                                    .replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelMedium,
+                                // Не сегодня — дата подкрашена: по тапу возвращаешься на
+                                // сегодня. На сегодняшнем экране подсказка не нужна.
+                                color = if (isToday) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                modifier = Modifier
+                                    .clip(Radius.segment)
+                                    .clickable(enabled = !isToday) { vm.backToToday() },
+                            )
+                            if (!isToday) {
+                                DayChevron(
+                                    icon = Icons.Filled.ChevronRight,
+                                    description = "Следующий день",
+                                    onClick = { vm.shiftDay(1) },
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.shiftDay(-1) }) {
-                        Icon(Icons.Filled.ChevronLeft, contentDescription = "Предыдущий день")
-                    }
-                    if (!isToday) {
-                        IconButton(onClick = { vm.shiftDay(1) }) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "Следующий день")
-                        }
-                        TextButton(onClick = { vm.backToToday() }) { Text("Сегодня") }
-                    }
                     // Кофеин — только когда трекер включён: иначе иконка занимала бы
                     // место в шапке у тех, кому он не нужен.
                     if (caffeineSettings.enabled) {
@@ -403,6 +415,30 @@ fun TodayScreen(
     }
 }
 
+/**
+ * Стрелка листания дней в строке с датой. Отдельная маленькая кнопка, а не иконка в
+ * действиях шапки: так заголовок и дата не отвоёвывают место у действий и шапка не
+ * разваливается на узком экране.
+ */
+@Composable
+private fun DayChevron(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(24.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            modifier = Modifier.size(Space.l),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun ProgressCard(doneCount: Int, total: Int) {
     val allDone = total > 0 && doneCount == total
@@ -436,11 +472,14 @@ private fun ProgressCard(doneCount: Int, total: Int) {
                     },
                 )
                 Spacer(Modifier.weight(1f))
+                // Подпись справа — вспомогательная: приглушена, чтобы не спорить с
+                // главным «Всё сделано». Фраза про «не думать» осталась, но ушла
+                // на второй план.
                 Text(
                     text = if (allDone) "можно не думать об этом" else "за день",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
@@ -482,29 +521,26 @@ private fun CaffeineRow(
     onClick: () -> Unit,
 ) {
     val allDone = doneCount >= moments
+    // Виджет состояния, а не ещё одно дело: та же карточка, но ниже и без акцентной
+    // заливки при выполнении — иначе строка читается как routine item и спорит со
+    // списком дел. Акцент остаётся только в иконке и цифрах.
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = Radius.card,
-        colors = CardDefaults.cardColors(
-            containerColor = if (allDone) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = if (allDone) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = Space.l, vertical = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Filled.LocalCafe,
                     contentDescription = null,
                     modifier = Modifier.size(IconSize.caption),
                     tint = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
@@ -512,26 +548,22 @@ private fun CaffeineRow(
                 Spacer(Modifier.width(Space.s))
                 Text(
                     text = "Кофеин",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
                     text = "$doneMg из $targetMg мг",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
             }
             if (!allDone) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Space.xs))
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     repeat(moments) { i ->
                         Box(
@@ -778,9 +810,19 @@ private fun HabitCard(
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
                                 },
-                                textDecoration = if (done) TextDecoration.LineThrough else null,
+                                // Зачёркивание тонкое и приглушённое: галка и серия уже
+                                // сообщают «выполнено», толстая линия мешала читать название.
                                 maxLines = 1,
-                                modifier = Modifier.weight(1f, fill = false),
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .softStrikeThrough(
+                                        if (done) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                                .copy(alpha = 0.55f)
+                                        } else {
+                                            Color.Transparent
+                                        },
+                                    ),
                             )
                             if (habit.hour >= 0) {
                                 Spacer(Modifier.width(Space.s))
@@ -800,8 +842,15 @@ private fun HabitCard(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
-                            textDecoration = if (done) TextDecoration.LineThrough else null,
+                            // Тонкое зачёркивание вместо LineThrough: см. Tokens.
                             maxLines = 1,
+                            modifier = Modifier.softStrikeThrough(
+                                if (done) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                } else {
+                                    Color.Transparent
+                                },
+                            ),
                         )
                         Spacer(Modifier.height(1.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {

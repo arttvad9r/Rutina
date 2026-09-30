@@ -184,6 +184,8 @@ fun HabitSheet(
             ) {
                 Text("Ограничить срок", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.weight(1f))
+                // Единый вид Switch на всё приложение: без тяжёлой тёмной обводки
+                // в выключенном состоянии (см. Tokens.rutinaSwitchColors).
                 Switch(
                     checked = limited,
                     onCheckedChange = {
@@ -191,6 +193,7 @@ fun HabitSheet(
                         if (it && duration == null) duration = 30
                         if (!it) custom = false
                     },
+                    colors = rutinaSwitchColors(),
                 )
             }
 

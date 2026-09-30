@@ -1,18 +1,15 @@
 package com.artt.rutina.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,7 +22,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.artt.rutina.data.CaffeineLogic
 import com.artt.rutina.data.CaffeineSettings
 
 /**
@@ -63,50 +62,44 @@ fun SettingsScreen(
                 .padding(horizontal = Space.screen)
                 .padding(top = Space.xs, bottom = Space.m),
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = Radius.card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            // Без общей outline-карточки: это обычная settings-строка, как в системных
+            // настройках. Пустота ниже честнее искусственных секций — настройка одна.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(Radius.card)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = Space.l, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.padding(horizontal = Space.l, vertical = 12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Трекер кофеина", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                text = "Считает дневную норму и напоминает о времени приёма",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(Space.m))
-                        Switch(
-                            checked = settings.enabled,
-                            onCheckedChange = onSetCaffeineEnabled,
-                        )
-                    }
-
-                    if (settings.enabled) {
-                        Spacer(Modifier.height(Space.s))
-                        Text(
-                            text = "Норма ${settings.targetMg} мг, подъём и сон — в настройках " +
-                                "трекера: шестерёнка в шапке экрана кофеина.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                Column(Modifier.weight(1f)) {
+                    Text("Трекер кофеина", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = if (settings.enabled) {
+                            // Окно приёмов, а не подъём–сон: «до сна» — не время приёма,
+                            // и такая подпись вводила в заблуждение.
+                            "Норма ${settings.targetMg} мг · " +
+                                CaffeineLogic.timeOf(settings.wakeMinutes).format(TIME_FORMAT) +
+                                "–" +
+                                CaffeineLogic.timeOf(
+                                    CaffeineLogic.plan(
+                                        targetMg = settings.targetMg,
+                                        wakeMinutes = settings.wakeMinutes,
+                                        bedtimeMinutes = settings.bedtimeMinutes,
+                                    ).schedule.lastAllowedMinutes,
+                                ).format(TIME_FORMAT)
+                        } else {
+                            "Дневная норма и напоминания о времени приёма"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-            }
-
-            if (!settings.enabled) {
-                Text(
-                    text = "Трекер кофеина выключен — норму, подъём и сон настроите после включения.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Spacer(Modifier.width(Space.m))
+                Switch(
+                    checked = settings.enabled,
+                    onCheckedChange = onSetCaffeineEnabled,
+                    colors = rutinaSwitchColors(),
                 )
             }
         }

@@ -133,8 +133,10 @@ fun CaffeineSettingsScreen(
                         }
                     }
                     Spacer(Modifier.height(Space.xs))
+                    // Одна динамическая строка вместо двух объяснений одной механики:
+                    // разбивку видно прямо под нормой.
                     Text(
-                        text = "Разбивается на ${plan.doses.size} приёма кратно 50 мг: " +
+                        text = "${settings.targetMg} мг → " +
                             plan.doses.joinToString(" + ") + " мг",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -183,22 +185,15 @@ fun CaffeineSettingsScreen(
                         text = if (plan.schedule.times.isEmpty()) {
                             "При таком подъёме и сне окна для приёмов нет"
                         } else {
-                            "Последний приём не позже " +
+                            "Последний приём до " +
                                 CaffeineLogic.timeOf(plan.schedule.lastAllowedMinutes).format(TIME_FORMAT) +
-                                " — за ${CaffeineLogic.FREE_HOURS_BEFORE_SLEEP} часов до сна"
+                                " · за ${CaffeineLogic.FREE_HOURS_BEFORE_SLEEP} ч до сна"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-
-            Text(
-                text = "Норма делится на приёмы от подъёма: время приёмов считается " +
-                    "от него, последний — за ${CaffeineLogic.FREE_HOURS_BEFORE_SLEEP} часов до сна.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 

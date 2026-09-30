@@ -46,7 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.rutina.data.CaffeineIntake
@@ -171,18 +171,22 @@ fun CaffeineScreen(
                 onRemove = onRemoveIntake,
             )
 
-            TimerCard(
-                timerActive = timerActive,
-                remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
-                slot = settings.timerSlot,
-                canStart = doneCount < plan.doses.size,
-                suggestedMinutes = suggestedMinutes,
-                recommendedMinutes = recommendedMinutes,
-                // slot — индекс только что отмеченного приёма: после первого это 0,
-                // поэтому подпись «после N-го» считается как slot + 1.
-                onStart = { minutes -> onStartTimer(minutes, doneCount - 1) },
-                onCancel = onCancelTimer,
-            )
+            // Таймер нужен, пока есть что отсчитывать. Когда все приёмы отмечены и
+            // отсчёта нет, карточка исчезает целиком: строка состояния уже есть в
+            // «Приёмах сегодня», и второй раз то же самое только шумит.
+            if (doneCount < plan.doses.size || timerActive) {
+                TimerCard(
+                    timerActive = timerActive,
+                    remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
+                    slot = settings.timerSlot,
+                    suggestedMinutes = suggestedMinutes,
+                    recommendedMinutes = recommendedMinutes,
+                    // slot — индекс только что отмеченного приёма: после первого это 0,
+                    // поэтому подпись «после N-го» считается как slot + 1.
+                    onStart = { minutes -> onStartTimer(minutes, doneCount - 1) },
+                    onCancel = onCancelTimer,
+                )
+            }
 
             HistoryCard(intakes = intakes, today = today)
         }
@@ -192,55 +196,43 @@ fun CaffeineScreen(
 @Composable
 private fun TotalCard(total: Int, target: Int, doneCount: Int, moments: Int) {
     val allDone = doneCount >= moments
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(
-            containerColor = if (allDone) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = if (allDone) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "$total мг",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                Spacer(Modifier.weight(1f))
-                if (!allDone) {
-                    Text(
-                        text = "из $target мг",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    // Заголовок состояния вместо «карточки в карточке»: норма и статус в одной
+    // строке, сегменты под ней. Раньше сверху жила ещё зелёная плашка на всю ширину,
+    // и экран читался как четыре вложенных контейнера.
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "$total / $target мг",
+                style = MaterialTheme.typography.titleLarge,
+                color = if (allDone) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+            Spacer(Modifier.width(Space.s))
+            Text(
+                text = if (allDone) "дневная норма выполнена" else "дневная норма",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+        }
+        if (!allDone) {
+            Spacer(Modifier.height(Space.s))
+            // Сегменты по приёмам: видно, сколько из них уже отмечено.
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                repeat(moments) { i ->
+                    Box(
+                        modifier = Modifier
+                            .width(22.dp)
+                            .height(5.dp)
+                            .clip(Radius.segment)
+                            .background(
+                                if (i < doneCount) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            ),
                     )
-                }
-            }
-            if (!allDone) {
-                Spacer(Modifier.height(Space.s))
-                // Сегменты по приёмам: видно, сколько из них уже отмечено.
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    repeat(moments) { i ->
-                        Box(
-                            modifier = Modifier
-                                .width(22.dp)
-                                .height(5.dp)
-                                .clip(Radius.segment)
-                                .background(
-                                    if (i < doneCount) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                        )
-                    }
                 }
             }
         }
@@ -321,7 +313,13 @@ private fun DosesCard(
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
-                        textDecoration = if (done) TextDecoration.LineThrough else null,
+                        modifier = Modifier.softStrikeThrough(
+                            if (done) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            } else {
+                                Color.Transparent
+                            },
+                        ),
                     )
                     Spacer(Modifier.weight(1f))
                     if (done) {
@@ -342,20 +340,33 @@ private fun DosesCard(
                 }
             }
 
-            Spacer(Modifier.height(Space.s))
-            Button(
-                onClick = onAdd,
-                enabled = todayIntakes.size < doses.size,
-                modifier = Modifier.fillMaxWidth(),
-                shape = Radius.field,
-            ) {
-                Text(
-                    if (todayIntakes.size < doses.size) {
-                        "Отметить ${doses[todayIntakes.size]} мг"
-                    } else {
-                        "Все приёмы отмечены"
-                    },
-                )
+            // После завершения огромная disabled-кнопка только шумит: она выглядит как
+            // действие, которое почему-то недоступно. Вместо неё — состояние.
+            if (todayIntakes.size < doses.size) {
+                Spacer(Modifier.height(Space.s))
+                Button(
+                    onClick = onAdd,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = Radius.field,
+                ) {
+                    Text("Отметить ${doses[todayIntakes.size]} мг")
+                }
+            } else {
+                Spacer(Modifier.height(Space.s))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(IconSize.caption),
+                    )
+                    Spacer(Modifier.width(Space.s))
+                    Text(
+                        text = "Норма на сегодня выполнена",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }
@@ -366,7 +377,6 @@ private fun TimerCard(
     timerActive: Boolean,
     remainingMs: Long,
     slot: Int?,
-    canStart: Boolean,
     suggestedMinutes: Int,
     recommendedMinutes: Int?,
     onStart: (Int) -> Unit,
@@ -380,30 +390,22 @@ private fun TimerCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Таймер до следующего приёма", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.weight(1f))
-                if (timerActive) {
+            if (timerActive) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = when {
+                            slot == null || slot < 0 -> "Таймер до следующего приёма"
+                            else -> "Таймер после ${slot + 1}-го приёма"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.weight(1f))
                     Text(
                         text = formatRemaining(remainingMs),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                }
-            }
-            if (timerActive) {
-                Spacer(Modifier.height(Space.s))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = when {
-                            slot == null -> "отсчёт идёт"
-                            slot < 0 -> "отсчёт идёт"
-                            else -> "после ${slot + 1}-го приёма"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.weight(1f))
                     TextButton(
                         onClick = onCancel,
                         colors = ButtonDefaults.textButtonColors(
@@ -414,7 +416,8 @@ private fun TimerCard(
                     }
                 }
             } else {
-                Spacer(Modifier.height(Space.s))
+                // Компактный таймер: только «− время +» и одна строка подписи,
+                // без отдельного заголовка и лишних отступов.
                 // Ключ сбрасывает счётчик на предложенное время: после отметки приёма
                 // рекомендуемый интервал меняется, и старый остаток смысла не имеет.
                 var minutes by remember(suggestedMinutes) {
@@ -425,7 +428,7 @@ private fun TimerCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space.s),
                 ) {
-                    StepperButton(Icons.Filled.Remove, "Меньше", enabled = canStart) {
+                    StepperButton(Icons.Filled.Remove, "Меньше", enabled = true) {
                         minutes = (minutes - CaffeineLogic.TIMER_STEP_MINUTES)
                             .coerceAtLeast(CaffeineLogic.TIMER_STEP_MINUTES)
                     }
@@ -442,18 +445,15 @@ private fun TimerCard(
                             text = if (recommendedMinutes != null) {
                                 "следующий приём в " +
                                     CaffeineLogic.timeOf(recommendedMinutes).format(TIME_FORMAT)
-                            } else if (canStart) {
-                                // Расписание молчит: либо окно дня закрыто, либо отметки уже
-                                // ушли за него. Таймер остаётся ручным, и это видно по подписи.
-                                "интервал вручную"
                             } else {
-                                "приёмы отмечены"
+                                // Расписание молчит: окно дня закрыто или отметки ушли за него.
+                                "интервал вручную"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    StepperButton(Icons.Filled.Add, "Больше", enabled = canStart) {
+                    StepperButton(Icons.Filled.Add, "Больше", enabled = true) {
                         minutes = (minutes + CaffeineLogic.TIMER_STEP_MINUTES)
                             .coerceAtMost(CaffeineLogic.MAX_TIMER_MINUTES)
                     }
@@ -461,11 +461,10 @@ private fun TimerCard(
                 Spacer(Modifier.height(Space.s))
                 Button(
                     onClick = { onStart(minutes) },
-                    enabled = canStart,
                     modifier = Modifier.fillMaxWidth(),
                     shape = Radius.field,
                 ) {
-                    Text(if (canStart) "Запустить" else "Сначала отметьте приёмы")
+                    Text("Запустить")
                 }
             }
         }
