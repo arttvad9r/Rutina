@@ -33,6 +33,12 @@ object CaffeineLogic {
     /** Таймер по умолчанию — 2 часа. */
     const val DEFAULT_TIMER_MINUTES = 120
 
+    /** Шаг кнопок «−» и «+» у таймера. */
+    const val TIMER_STEP_MINUTES = 15
+
+    /** Верхняя граница таймера — сутки: больше ждать нечего. */
+    const val MAX_TIMER_MINUTES = 24 * 60
+
     /**
      * Разбивает норму на приёмы, кратные 50 мг. Большие дозы идут первыми:
      * 250 → 100 + 100 + 50, 200 → 100 + 50 + 50.
@@ -126,6 +132,45 @@ object CaffeineLogic {
 
     /** Сколько мг выпито за день. */
     fun totalMg(intakes: List<CaffeineIntake>): Int = intakes.sumOf { it.mg }
+
+    /**
+     * Рекомендуемое время следующего приёма.
+     *
+     * Если приёмы уже отмечали — это интервал расписания от фактической отметки: отметка
+     * позже расписания сдвигает день, а не отменяет его. До первой отметки рекомендуем
+     * ближайшее время из расписания, которое ещё не прошло.
+     *
+     * null — рекомендовать нечего: приём один (интервала нет), окно дня закрыто или
+     * сегодняшние времена уже прошли.
+     */
+    fun nextIntakeMinutes(
+        nowMinutes: Int,
+        schedule: IntakeSchedule,
+        lastIntakeMinutes: Int?,
+    ): Int? {
+        if (lastIntakeMinutes != null) {
+            val interval = schedule.intervalMinutes ?: return null
+            val next = lastIntakeMinutes + interval
+            return if (next > schedule.lastAllowedMinutes) null else next
+        }
+        // Время приёма рекомендуется и в свою минуту: подсказка честно говорит «примите
+        // сейчас», а не отправляет к следующему приёму за четыре часа.
+        return schedule.times.firstOrNull { it >= nowMinutes }
+    }
+
+    /**
+     * Сколько минут поставить в таймер: от «сейчас» до рекомендованного приёма, округляя
+     * до шага кнопок (время приёма от этого заметно не уезжает, а кнопки остаются рабочими).
+     * Если рекомендации нет или она уже прошла — обычные два часа: таймер остаётся ручным.
+     */
+    fun timerMinutes(nowMinutes: Int, recommendedMinutes: Int?): Int {
+        // Приём, рекомендованный «прямо сейчас», даёт минимальный шаг: таймер напомнит
+        // о нём, а не отправит ждать два часа.
+        val left = recommendedMinutes?.let { (it - nowMinutes).coerceAtLeast(0) }
+        val base = left ?: DEFAULT_TIMER_MINUTES
+        val rounded = (base + TIMER_STEP_MINUTES / 2) / TIMER_STEP_MINUTES * TIMER_STEP_MINUTES
+        return rounded.coerceIn(TIMER_STEP_MINUTES, MAX_TIMER_MINUTES)
+    }
 
     /**
      * Ближайший неотмеченный приём: по нему запускается таймер.

@@ -124,4 +124,86 @@ class CaffeineTest {
         assertEquals(8 * 60, CaffeineLogic.minutesOf(LocalTime.of(8, 0)))
         assertEquals(LocalTime.of(23, 59), CaffeineLogic.timeOf(23 * 60 + 59))
     }
+
+    // Расписание теста-образца: подъём 08:00, сон 01:00 → приёмы 08:00 / 12:30 / 17:00.
+    private val daytime = CaffeineLogic.schedule(wakeMinutes = 8 * 60, bedtimeMinutes = 1 * 60)
+
+    @Test
+    fun `до первой отметки рекомендуем ближайшее время расписания включая своё`() {
+        assertEquals(8 * 60, CaffeineLogic.nextIntakeMinutes(6 * 60, daytime, lastIntakeMinutes = null))
+        // ровно в свою минуту приём ещё рекомендуем: «примите сейчас»
+        assertEquals(8 * 60, CaffeineLogic.nextIntakeMinutes(8 * 60, daytime, null))
+        assertEquals(17 * 60, CaffeineLogic.nextIntakeMinutes(13 * 60, daytime, null))
+        // в 17:05 окно дня закрыто, следующий приём — уже завтра
+        assertNull(CaffeineLogic.nextIntakeMinutes(17 * 60 + 5, daytime, null))
+        assertEquals(17 * 60, CaffeineLogic.nextIntakeMinutes(13 * 60, daytime, null))
+    }
+
+    @Test
+    fun `после приёмов рекомендуем интервал от фактической отметки`() {
+        // отметили в 09:00 вместо 08:00 → следующий через интервал расписания, в 13:30
+        assertEquals(13 * 60 + 30, CaffeineLogic.nextIntakeMinutes(9 * 60, daytime, 9 * 60))
+        // пока рекомендуемое время не наступило, рекомендация та же
+        assertEquals(13 * 60 + 30, CaffeineLogic.nextIntakeMinutes(11 * 60, daytime, 9 * 60))
+    }
+
+    @Test
+    fun `рекомендации нет когда окно дня закрыто`() {
+        // все времена расписания прошли
+        assertNull(CaffeineLogic.nextIntakeMinutes(20 * 60, daytime, lastIntakeMinutes = null))
+        // фактическая отметка позже крайнего срока: следующий приём уже за сроком 17:00
+        assertNull(CaffeineLogic.nextIntakeMinutes(15 * 60, daytime, 15 * 60))
+    }
+
+    @Test
+    fun `приём ровно в крайний срок ещё рекомендуем`() {
+        // отметка в 12:30 плюс интервал 4:30 → ровно 17:00, это допустимо
+        assertEquals(17 * 60, CaffeineLogic.nextIntakeMinutes(12 * 60 + 30, daytime, 12 * 60 + 30))
+    }
+
+    @Test
+    fun `при одном приёме рекомендации нет`() {
+        val single = CaffeineLogic.schedule(wakeMinutes = 8 * 60, bedtimeMinutes = 1 * 60, moments = 1)
+        assertNull(CaffeineLogic.nextIntakeMinutes(9 * 60, single, lastIntakeMinutes = null))
+        assertNull(CaffeineLogic.nextIntakeMinutes(9 * 60, single, lastIntakeMinutes = 8 * 60))
+    }
+
+    @Test
+    fun `таймер ставится на остаток до рекомендованного времени`() {
+        // сейчас 08:00, приём рекомендован в 12:30 → 4 ч 30 м
+        assertEquals(270, CaffeineLogic.timerMinutes(8 * 60, 12 * 60 + 30))
+        // приём рекомендован на сейчас → минимальный шаг, а не «через час»
+        assertEquals(
+            CaffeineLogic.TIMER_STEP_MINUTES,
+            CaffeineLogic.timerMinutes(8 * 60, 8 * 60),
+        )
+    }
+
+    @Test
+    fun `остаток округляется до шага кнопок`() {
+        // 08:09 → до 12:30 остаётся 261 минута, округляем до 255
+        assertEquals(255, CaffeineLogic.timerMinutes(8 * 60 + 9, 12 * 60 + 30))
+        // 08:08 → 262 минуты: до 255 семь минут, до 270 восемь — берём ближнее
+        assertEquals(255, CaffeineLogic.timerMinutes(8 * 60 + 8, 12 * 60 + 30))
+        // 08:07 → 263 минуты: до 270 семь минут против восьми до 255
+        assertEquals(270, CaffeineLogic.timerMinutes(8 * 60 + 7, 12 * 60 + 30))
+    }
+
+    @Test
+    fun `без рекомендации таймер берёт обычные два часа`() {
+        // вечером приёмы уже не рекомендуются, но таймер должен запускаться вручную
+        assertEquals(CaffeineLogic.DEFAULT_TIMER_MINUTES, CaffeineLogic.timerMinutes(20 * 60, null))
+    }
+
+    @Test
+    fun `таймер не уходит в ноль и не превышает сутки`() {
+        assertEquals(
+            CaffeineLogic.TIMER_STEP_MINUTES,
+            CaffeineLogic.timerMinutes(8 * 60 + 1, 8 * 60 + 2),
+        )
+        assertEquals(
+            CaffeineLogic.MAX_TIMER_MINUTES,
+            CaffeineLogic.timerMinutes(0, 30 * 60),
+        )
+    }
 }

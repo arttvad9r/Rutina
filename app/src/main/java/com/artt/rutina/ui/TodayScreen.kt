@@ -93,6 +93,7 @@ private sealed interface Screen {
     data object Today : Screen
     data class History(val habitId: Long) : Screen
     data object Caffeine : Screen
+    data object CaffeineSettings : Screen
     data object Settings : Screen
 }
 
@@ -127,7 +128,6 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
                 settings = caffeineSettings,
                 onBack = { screen = Screen.Today },
                 onSetCaffeineEnabled = { vm.setCaffeineEnabled(it) },
-                onSetTarget = { vm.setCaffeineTarget(it) },
             )
         }
 
@@ -139,13 +139,22 @@ fun RutinaRoot(notificationsAllowed: () -> Boolean) {
                 intakes = intakes,
                 today = LocalDate.now(),
                 onBack = { screen = Screen.Today },
-                onSetTarget = { vm.setCaffeineTarget(it) },
-                onSetBedtime = { vm.setCaffeineBedtime(it) },
-                onSetWake = { vm.setCaffeineWake(it) },
+                onOpenSettings = { screen = Screen.CaffeineSettings },
                 onAddIntake = { vm.addCaffeine(it) },
                 onRemoveIntake = { vm.removeCaffeine(it) },
                 onStartTimer = { minutes, slot -> vm.startCaffeineTimer(minutes, slot) },
                 onCancelTimer = { vm.cancelCaffeineTimer() },
+            )
+        }
+
+        is Screen.CaffeineSettings -> {
+            val caffeineSettings by vm.caffeineSettings.collectAsStateWithLifecycle()
+            CaffeineSettingsScreen(
+                settings = caffeineSettings,
+                onBack = { screen = Screen.Caffeine },
+                onSetTarget = { vm.setCaffeineTarget(it) },
+                onSetWake = { vm.setCaffeineWake(it) },
+                onSetBedtime = { vm.setCaffeineBedtime(it) },
             )
         }
     }
