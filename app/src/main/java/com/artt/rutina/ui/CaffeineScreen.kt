@@ -18,13 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -174,12 +171,6 @@ fun CaffeineScreen(
                 onRemove = onRemoveIntake,
             )
 
-            ScheduleSummaryRow(
-                wakeMinutes = settings.wakeMinutes,
-                bedtimeMinutes = settings.bedtimeMinutes,
-                onOpenSettings = onOpenSettings,
-            )
-
             TimerCard(
                 timerActive = timerActive,
                 remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
@@ -226,15 +217,13 @@ private fun TotalCard(total: Int, target: Int, doneCount: Int, moments: Int) {
                     },
                 )
                 Spacer(Modifier.weight(1f))
-                Text(
-                    text = if (allDone) "норма принята" else "из $target мг",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (allDone) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
+                if (!allDone) {
+                    Text(
+                        text = "из $target мг",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (!allDone) {
                 Spacer(Modifier.height(Space.s))
@@ -368,51 +357,6 @@ private fun DosesCard(
                     },
                 )
             }
-        }
-    }
-}
-
-/** Одна строка вместо карточки расписания: подъём и сон уехали в настройки трекера. */
-@Composable
-private fun ScheduleSummaryRow(
-    wakeMinutes: Int,
-    bedtimeMinutes: Int,
-    onOpenSettings: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpenSettings)
-                .padding(horizontal = Space.l, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.WbSunny,
-                contentDescription = null,
-                modifier = Modifier.size(IconSize.caption),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(Space.s))
-            Text(
-                text = "Подъём ${CaffeineLogic.timeOf(wakeMinutes).format(TIME_FORMAT)} · " +
-                    "сон ${CaffeineLogic.timeOf(bedtimeMinutes).format(TIME_FORMAT)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.weight(1f))
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                modifier = Modifier.size(IconSize.caption),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
