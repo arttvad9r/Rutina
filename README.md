@@ -3,6 +3,12 @@
 Личный минималистичный трекер рутины под Android. Одно окно со списком дел на сегодня,
 кружок для отметки и история выполнения по каждому делу.
 
+**[Скачать последнюю версию для Android](https://github.com/arttvad9r/Rutina/releases/latest)** · Android 8+
+
+![Рутина: привычки, календарь и кофеин](docs/releases/v1.9/overview.png)
+
+[Что нового в 1.9 и как обновиться](docs/releases/v1.9/README.md)
+
 ## Что умеет
 
 - **Привычки.** Название, необязательное напоминание и срок: без ограничений либо
@@ -37,15 +43,15 @@ export ANDROID_HOME=/home/artt/Android/Sdk JAVA_HOME=/home/artt/.local/jdk/java-
 ./gradlew assembleRelease                   # release APK
 ```
 
-Готовые APK: `dist/Rutina-1.8.apk` (release, подписан собственным ключом),
-`dist/Rutina-1.8-debug.apk` (debug-ключ; ставится поверх прошлых debug-сборок)
-и `dist/Rutina-1.0-debug.apk`.
+Файлы версии 1.9: `Rutina-1.9.apk` (release, подписан собственным ключом)
+и `Rutina-1.9-debug.apk` (для обновления прошлых debug-сборок). Скачивание —
+[в релизе 1.9](https://github.com/arttvad9r/Rutina/releases/tag/v1.9).
 
 **Установка на телефон.** Готовый APK — в разделе Releases:
 <https://github.com/arttvad9r/Rutina/releases/latest>. Скачивать файл и открывать
 на телефоне напрямую (GitHub отдаёт APK без блокировок). Папка `dist/` в git не
 попадает (см. `.gitignore`), поэтому обновлять ассет релиза нужно вручную:
-`gh release upload v1.8 dist/Rutina-1.8.apk --clobber`.
+`gh release upload v1.9 dist/releases/v1.9/Rutina-1.9.apk --clobber`.
 
 **Подпись.** Release подписывается ключом из `keystore/rutina-release.jks`
 (пароль — в `keystore/keystore.properties`, папка в `.gitignore` и не попадает в git).
@@ -67,7 +73,7 @@ export ANDROID_HOME=/home/artt/Android/Sdk JAVA_HOME=/home/artt/.local/jdk/java-
 Установка на телефон по кабелю:
 
 ```bash
-adb install -r dist/Rutina-1.8.apk
+adb install -r Rutina-1.9.apk
 ```
 
 Технически: Kotlin 2.1, Jetpack Compose (Material 3), Room, minSdk 26 (Android 8+),
