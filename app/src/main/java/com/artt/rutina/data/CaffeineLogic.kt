@@ -134,7 +134,11 @@ object CaffeineLogic {
     }
 
     /** Сколько мг выпито за день. */
-    fun totalMg(intakes: List<CaffeineIntake>): Int = intakes.sumOf { it.mg }
+    fun totalMg(intakes: List<CaffeineIntake>): Int = intakes.filter { it.recorded }.sumOf { it.mg }
+
+    /** После уменьшения плана уже отмеченные приёмы остаются видимыми. */
+    fun visibleSlots(doses: List<Int>, intakes: List<CaffeineIntake>): List<Int> =
+        (doses.indices.toList() + intakes.filter { it.recorded }.mapNotNull { it.slot }).distinct().sorted()
 
     /**
      * Рекомендуемое время следующего приёма.

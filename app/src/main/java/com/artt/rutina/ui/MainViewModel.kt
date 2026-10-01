@@ -57,6 +57,32 @@ class MainViewModel(
         }
     }
 
+    fun toggleOnDay(habit: Habit, date: LocalDate) {
+        if (!com.artt.rutina.data.canMarkDay(habit, date, LocalDate.now())) return
+        viewModelScope.launch {
+            repo.toggle(habit.id, date)
+            if (date == LocalDate.now() && repo.isDone(habit.id, date)) Notifier.clear(context, habit.id)
+        }
+    }
+
+    fun finishHabit(habit: Habit) {
+        viewModelScope.launch {
+            repo.update(habit.copy(active = false, finishedAt = System.currentTimeMillis()))
+            Reminders.cancel(context, habit)
+            Notifier.clear(context, habit.id)
+        }
+    }
+
+    fun resumeHabit(habit: Habit) {
+        viewModelScope.launch {
+            val expired = com.artt.rutina.data.courseEnd(habit)?.isBefore(LocalDate.now()) == true
+            val updated = habit.copy(active = true, finishedAt = null,
+                durationDays = if (expired) com.artt.rutina.data.NO_LIMIT else habit.durationDays)
+            repo.update(updated)
+            Reminders.schedule(context, updated)
+        }
+    }
+
     fun saveHabit(existing: Habit?, name: String, hour: Int, minute: Int, durationDays: Int) {
         viewModelScope.launch {
             val id = if (existing == null) {
@@ -118,16 +144,16 @@ class MainViewModel(
     fun setCaffeineEnabled(enabled: Boolean) {
         viewModelScope.launch {
             val s = repo.caffeineSettingsNow()
-            repo.saveCaffeineSettings(s.copy(enabled = enabled))
+            repo.saveCaffeineSettings(s.copy(enabled = enabled,
+                timerEndMs = if (enabled) s.timerEndMs else null,
+                timerSlot = if (enabled) s.timerSlot else null))
+            if (!enabled) CaffeineTimer.cancel(context)
         }
     }
 
     fun setCaffeineTarget(targetMg: Int) {
         viewModelScope.launch {
-            val s = repo.caffeineSettingsNow()
-            repo.saveCaffeineSettings(
-                s.copy(targetMg = targetMg.coerceIn(CaffeineLogic.MIN_TARGET, CaffeineLogic.MAX_TARGET)),
-            )
+            repo.setCaffeineTarget(targetMg.coerceIn(CaffeineLogic.MIN_TARGET, CaffeineLogic.MAX_TARGET))
         }
     }
 
@@ -154,6 +180,14 @@ class MainViewModel(
 
     fun removeCaffeine(id: Long) {
         viewModelScope.launch { repo.removeCaffeine(id) }
+    }
+
+    fun toggleCaffeine(slot: Int, mg: Int) {
+        viewModelScope.launch { repo.toggleCaffeine(LocalDate.now(), slot, mg) }
+    }
+
+    fun editCaffeineDose(slot: Int, mg: Int, at: Long?) {
+        viewModelScope.launch { repo.editCaffeineDose(LocalDate.now(), slot, mg, at) }
     }
 
     /** Запустить таймер до следующего приёма. */

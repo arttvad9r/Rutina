@@ -89,8 +89,8 @@ class CaffeineTimerReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(context, CaffeineTimer.CHANNEL)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("Пора принять кофеин")
-            .setContentText("Интервал прошёл — это время следующего приёма.")
+            .setContentTitle("Пауза завершена")
+            .setContentText("Таймер кофеина закончился.")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

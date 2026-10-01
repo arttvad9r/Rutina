@@ -21,7 +21,7 @@ const val NO_LIMIT = 0
 /** День создания дела в локальной зоне. */
 internal fun startDay(createdAt: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDate =
     runCatching { Instant.ofEpochMilli(createdAt).atZone(zone).toLocalDate() }
-        .getOrDefault(LocalDate.EPOCH)
+        .getOrDefault(LocalDate.of(1970, 1, 1))
 
 /**
  * Последний день курса (включительно) или null, если дело бессрочное.
@@ -43,6 +43,7 @@ internal fun daysLeft(habit: Habit, day: LocalDate, zone: ZoneId = ZoneId.system
 
 /** Курс закончился до [day]: дело больше не показывается в делах на день. */
 internal fun finishedOn(habit: Habit, day: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Boolean {
+    if (habit.finishedAt?.let { !day.isBefore(startDay(it, zone)) } == true) return true
     val end = courseEnd(habit, zone) ?: return false
     return day.isAfter(end)
 }
@@ -55,6 +56,12 @@ internal fun habitOnDay(habit: Habit, day: LocalDate, zone: ZoneId = ZoneId.syst
     if (day.isBefore(startDay(habit.createdAt, zone))) return false
     return !finishedOn(habit, day, zone)
 }
+
+/** Доступные даты календаря; день ручного завершения ещё входит в историю. */
+internal fun canMarkDay(habit: Habit, day: LocalDate, today: LocalDate): Boolean =
+    !day.isAfter(today) && !day.isBefore(startDay(habit.createdAt)) &&
+        (courseEnd(habit)?.let { !day.isAfter(it) } ?: true) &&
+        (habit.finishedAt?.let { !day.isAfter(startDay(it)) } ?: true)
 
 /**
  * Подпись о сроке для карточки и истории: «без срока», «осталось 12 дней»,

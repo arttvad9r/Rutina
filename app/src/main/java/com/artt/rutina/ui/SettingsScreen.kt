@@ -1,6 +1,10 @@
 package com.artt.rutina.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +42,7 @@ fun SettingsScreen(
     settings: CaffeineSettings,
     onBack: () -> Unit,
     onSetCaffeineEnabled: (Boolean) -> Unit,
+    onOpenCaffeineSettings: () -> Unit,
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -59,11 +64,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = Space.screen)
                 .padding(top = Space.xs, bottom = Space.m),
         ) {
-            // Без общей outline-карточки: это обычная settings-строка, как в системных
-            // настройках. Пустота ниже честнее искусственных секций — настройка одна.
+            Text("Дополнительные функции", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 16.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -74,11 +81,11 @@ fun SettingsScreen(
             ) {
                 // Только название и выключатель: норма и расписание принадлежат
                 // настройкам самого трекера — здесь они пересказывались второй раз.
-                Text(
-                    "Трекер кофеина",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text("Трекер кофеина", style = MaterialTheme.typography.bodyLarge)
+                    Text("Приёмы, дневной план и таймер", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.width(Space.m))
                 Switch(
                     checked = settings.enabled,
@@ -86,6 +93,13 @@ fun SettingsScreen(
                     colors = rutinaSwitchColors(),
                 )
             }
+            if (settings.enabled) OutlinedButton(onClick = onOpenCaffeineSettings,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp), shape = Radius.field) {
+                Text("Настроить трекер")
+            }
+            Text("При выключении трекер скрывается с главной. Настройки и история сохраняются.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp))
         }
     }
 }

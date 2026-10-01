@@ -8,6 +8,22 @@ import java.time.LocalDate
 
 /** Календарь месяца: строки — недели Пн→Вс, ячейки только текущего месяца, сегодня в конце. */
 class HistoryGridTest {
+    @Test
+    fun сеткаНеЗависитОтВыбранногоДняМесяца() {
+        for (month in 1..12) {
+            val first = LocalDate.of(2026, month, 1)
+            for (day in 1..first.lengthOfMonth()) {
+                assertEquals(monthGrid(first), monthGrid(first.withDayOfMonth(day)))
+            }
+        }
+    }
+
+    @Test
+    fun сегодняшняяОтметкаПродолжаетВчерашнююСерию() {
+        val days = setOf("2026-09-29", "2026-09-30")
+        assertEquals(2, streakOf(days, LocalDate.of(2026, 10, 1)))
+        assertEquals(3, streakOf(days + "2026-10-01", LocalDate.of(2026, 10, 1)))
+    }
 
     private val tuesday = LocalDate.of(2026, 9, 29) // вторник
 

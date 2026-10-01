@@ -2,6 +2,10 @@ package com.artt.rutina.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -86,7 +90,7 @@ fun CaffeineSettingsScreen(
                     }
                 },
                 title = {
-                    Text("Кофеин", style = MaterialTheme.typography.titleMedium)
+                    Text("Настройки кофеина", style = MaterialTheme.typography.titleLarge)
                 },
             )
         },
@@ -95,6 +99,7 @@ fun CaffeineSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = Space.screen)
                 .padding(top = Space.xs, bottom = Space.m),
             verticalArrangement = Arrangement.spacedBy(Space.s),
@@ -110,7 +115,7 @@ fun CaffeineSettingsScreen(
                     Modifier.padding(horizontal = Space.l, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Дневная норма", style = MaterialTheme.typography.bodyMedium)
+                    Text("План на день", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(Space.s))
                     // Ручной выбор как у таймера: «− 150 мг +», шаг 50, границы 50–600.
                     // Чипы-пресеты заставляли выбирать из готового списка — теперь любое
@@ -131,8 +136,32 @@ fun CaffeineSettingsScreen(
                             onSetTarget(settings.targetMg + CaffeineLogic.STEP_MG)
                         }
                     }
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(200, 400).forEach { mg ->
+                            OutlinedButton(onClick = { onSetTarget(mg) }, shape = Radius.field, modifier = Modifier.weight(1f)) {
+                                Text("$mg мг")
+                            }
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(Modifier.fillMaxWidth()) {
+                        plan.doses.forEachIndexed { index, dose ->
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("$dose мг", style = MaterialTheme.typography.bodyMedium)
+                                plan.schedule.times.getOrNull(index)?.let {
+                                    Text(CaffeineLogic.timeOf(it).format(TIME_FORMAT), style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                    Text("Дозы кратны 50 мг", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
                 }
             }
+
+            Text("Отмеченные приёмы сохраняются при изменении плана.", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -259,7 +288,7 @@ private fun TimeAskDialog(
         },
         title = { Text(title) },
         text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                 TimePicker(state = state)
             }
         },

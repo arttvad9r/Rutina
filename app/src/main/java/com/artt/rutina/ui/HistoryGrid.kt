@@ -10,7 +10,7 @@ import java.time.YearMonth
  */
 internal fun monthGrid(today: LocalDate): List<List<LocalDate?>> {
     val month = YearMonth.from(today)
-    val leading = today.dayOfWeek.value - 1 // Пн = 1 → сдвиг 0
+    val leading = month.atDay(1).dayOfWeek.value - 1 // Пн = 1 → сдвиг 0
     val cells = MutableList<LocalDate?>(leading) { null }
     for (day in 1..month.lengthOfMonth()) {
         cells.add(month.atDay(day))

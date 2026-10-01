@@ -1,350 +1,146 @@
 package com.artt.rutina.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.artt.rutina.data.NO_LIMIT
-import com.artt.rutina.data.courseStatusText
-import com.artt.rutina.data.pluralDays
-import kotlinx.coroutines.flow.collectLatest
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.artt.rutina.data.*
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val FULL_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale("ru"))
-
-/**
- * Сколько последних отметок показываем списком.
- * Список ограничен, чтобы экран гарантированно укладывался без прокрутки:
- * календарь и так показывает всю историю за 60 дней.
- */
-private const val MAX_RECENT = 6
+private val HISTORY_DATE = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
+private val MONTH_FORMAT = DateTimeFormatter.ofPattern("LLLL yyyy", Locale.forLanguageTag("ru"))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(habitId: Long, onBack: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val app = context.applicationContext as com.artt.rutina.RutinaApp
-
-    var habitName by remember { mutableStateOf("") }
-    var hour by remember { mutableStateOf(-1) }
-    var minute by remember { mutableStateOf(0) }
-    var createdAt by remember { mutableStateOf(LocalDate.EPOCH) }
-    var durationDays by remember { mutableStateOf(NO_LIMIT) }
-    var days by remember { mutableStateOf<List<LocalDate>>(emptyList()) }
-
-    LaunchedEffect(habitId) {
-        app.repo.habit(habitId)?.let {
-            habitName = it.name
-            hour = it.hour
-            minute = it.minute
-            durationDays = it.durationDays
-            // день создания: дни до него не показываем как «пропущенные»
-            createdAt = runCatching {
-                java.time.Instant.ofEpochMilli(it.createdAt)
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-            }.getOrDefault(LocalDate.EPOCH)
-        }
-        app.repo.observeHabit(habitId).collectLatest { list ->
-            days = list.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-        }
-    }
-
-    val daySet = days.map { it.toString() }.toSet()
-    val today = LocalDate.now()
-    val streak = streakOf(daySet, today)
-    val best = bestStreak(daySet, today)
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                title = {
-                    Column {
-                        Text(
-                            text = if (habitName.isBlank()) "История" else habitName,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (hour >= 0) {
-                                Icon(
-                                    Icons.Filled.Schedule,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(IconSize.caption),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.width(Space.xs))
-                                Text(
-                                    text = String.format("%02d:%02d", hour, minute),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                Text(
-                                    text = "без напоминания",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            // Срок курса: без него «0/30» у закончившегося курса читается
-                            // как «забросил», хотя дело просто дошло до конца.
-                            if (durationDays > NO_LIMIT) {
-                                Spacer(Modifier.width(Space.s))
-                                Text(
-                                    text = courseStatusText(
-                                        start = createdAt,
-                                        durationDays = durationDays,
-                                        day = today,
-                                    ),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+fun HistoryScreen(habitId: Long, onBack: () -> Unit, today: LocalDate = LocalDate.now()) {
+    val vm = mainViewModel()
+    val snapshot by vm.snapshot.collectAsStateWithLifecycle()
+    val habit = snapshot?.habits?.firstOrNull { it.id == habitId }
+    val daySet = snapshot?.records?.get(habitId).orEmpty()
+    var monthKey by rememberSaveable(habitId) { mutableStateOf(YearMonth.from(today).toString()) }
+    var selectedKey by rememberSaveable(habitId) { mutableStateOf<String?>(null) }
+    var edit by rememberSaveable { mutableStateOf(false) }
+    val month = YearMonth.parse(monthKey)
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        TopAppBar(title = { Text(habit?.name ?: "История", style = MaterialTheme.typography.titleLarge) },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            actions = { if (habit != null) IconButton(onClick = { edit = true }) { Icon(Icons.Default.Edit, "Изменить привычку") } })
+    }) { padding ->
+        if (habit != null) Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+            .padding(horizontal = Space.screen).padding(bottom = 24.dp)) {
+            Text(buildString {
+                append(if (habit.hour < 0) "Без напоминания" else "Напоминание в %02d:%02d".format(Locale.ROOT, habit.hour, habit.minute))
+                when {
+                    finishedOn(habit, today) -> append(" · Завершена")
+                    !habit.active -> append(" · На паузе")
+                    courseEnd(habit) != null -> append(" · до " + courseEnd(habit)!!.format(HISTORY_DATE))
+                }
+            }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Серия ${daysWord(streakOf(daySet, today))} · Рекорд ${daysWord(bestStreak(daySet, today))}",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 18.dp, bottom = 18.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { monthKey = month.minusMonths(1).toString(); selectedKey = null },
+                    enabled = month > YearMonth.from(startDay(habit.createdAt))) { Icon(Icons.Default.ChevronLeft, "Предыдущий месяц") }
+                Text(month.format(MONTH_FORMAT).replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                IconButton(onClick = { monthKey = month.plusMonths(1).toString(); selectedKey = null },
+                    enabled = month < YearMonth.from(today)) { Icon(Icons.Default.ChevronRight, "Следующий месяц") }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { label ->
+                    Text(label, Modifier.weight(1f).padding(vertical = 8.dp), textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            monthGrid(month.atDay(1)).forEach { week ->
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    week.forEach { day ->
+                        if (day == null) Spacer(Modifier.weight(1f).height(44.dp)) else {
+                            val done = day.toString() in daySet
+                            val enabled = canMarkDay(habit, day, today)
+                            Surface(onClick = { selectedKey = day.toString() }, enabled = enabled,
+                                modifier = Modifier.weight(1f).heightIn(min = 44.dp).semantics {
+                                    contentDescription = "${day.format(HISTORY_DATE)}: ${if (done) "выполнено" else if (enabled) "не отмечено" else "вне периода"}"
+                                }, shape = Radius.field,
+                                color = if (done) MaterialTheme.colorScheme.primary else if (enabled) MaterialTheme.colorScheme.surface else Color.Transparent,
+                                contentColor = if (done) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                border = when (day.toString()) {
+                                    selectedKey -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                    today.toString() -> BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface)
+                                    else -> null
+                                }) {
+                                Text(day.dayOfMonth.toString(), Modifier.padding(vertical = 12.dp),
+                                    textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (enabled || done) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .5f))
                             }
                         }
                     }
-                },
-            )
-        },
-    ) { padding ->
-        // Экран не прокручивается: календарь занимает всё оставшееся место и сам
-        // подбирает размер клетки, поэтому список отметок никогда не выталкивает контент.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = Space.screen)
-                .padding(top = Space.xs, bottom = Space.m),
-            // Зазоры фиксированные, а свободная высота остаётся внизу: так на узком
-            // экране не возникает провал между статистикой и календарём.
-            verticalArrangement = Arrangement.spacedBy(Space.s),
-        ) {
-            // Серия и рекорд — одной строкой, без карточки и без «N/30 за 30 дней»:
-            // плотность отметок и так видна на календаре ниже, третий способ
-            // показывать одни и те же дни только утяжеляет экран.
-            Text(
-                text = "Серия ${daysWord(streak)} · Рекорд ${daysWord(best)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HistoryGrid(
-                daySet = daySet,
-                today = today,
-                createdAt = createdAt,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            val recent = days.sortedDescending().take(MAX_RECENT)
-            if (recent.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Последние отметки", style = MaterialTheme.typography.titleMedium)
-                    recent.forEach { d ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary),
-                            )
-                            Spacer(Modifier.width(Space.s))
-                            Text(
-                                text = d.format(FULL_FORMAT),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = if (d == today) "сегодня" else "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                }
+            }
+            Text("Зелёные дни — выполнено", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+            selectedKey?.let { key ->
+                val selected = LocalDate.parse(key)
+                if (canMarkDay(habit, selected, today)) Card(Modifier.fillMaxWidth().padding(top = 20.dp),
+                    shape = Radius.card, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(selected.format(HISTORY_DATE), style = MaterialTheme.typography.bodyMedium)
+                            Text(if (key in daySet) "Выполнено" else "Не отмечено", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        OutlinedButton(onClick = { vm.toggleOnDay(habit, selected) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp), shape = Radius.field) {
+                            Text(if (key in daySet) "Снять отметку" else "Отметить выполнение")
                         }
                     }
                 }
             }
         }
     }
+    if (edit && habit != null) HabitSheet(habit, { edit = false }, { name, hour, minute, duration ->
+        vm.saveHabit(habit, name, hour, minute, duration); edit = false
+    }, { vm.delete(habit.id); edit = false; onBack() })
 }
 
-
-/** Тонкий разделитель: без него три значения сливались в одну строку текста. */
-
-private val DOW_LABELS = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-
-/**
- * Календарь текущего месяца в классической ориентации: строка = неделя,
- * колонка = день недели (Пн слева, Вс справа), сверху — строка подписей дней недели,
- * над ней — название месяца. Число стоит внутри клетки, как в бумажном календаре.
- * Клетки — квадраты, размер считается от доступного места (BoxWithConstraints),
- * поэтому сетка целиком помещается на экран при любом размере и не требует прокрутки.
- */
-@Composable
-private fun HistoryGrid(
-    daySet: Set<String>,
-    today: LocalDate,
-    createdAt: LocalDate,
-    modifier: Modifier = Modifier,
-) {
-    val weeks = monthGrid(today)
-    val monthTitle = today.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru")))
-        .replaceFirstChar { it.uppercase(Locale("ru")) }
-    val gap = Radius.gridGap
-
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val byWidth = (maxWidth - gap * 6) / 7
-        val byHeight = ((maxHeight - gap * 8) / 8).coerceAtLeast(4.dp)
-        val cell = minOf(byWidth, byHeight, 64.dp).coerceAtLeast(4.dp)
-        val gridWidth = cell * 7 + gap * 6
-
-        Column(
-            // Не fillMaxSize: сетка занимает ровно свою высоту и не собирает
-            // вокруг себя пустой провал — свободное место раздаёт родитель.
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Column(modifier = Modifier.width(gridWidth)) {
-                Text(
-                    text = monthTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(Space.xs))
-
-                // Шапка дней недели
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    DOW_LABELS.forEach { dow ->
-                        Box(
-                            modifier = Modifier.width(cell),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = dow,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(Space.xs))
-
-                // Строки-недели: внутри — дни Пн→Вс
-                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                    weeks.forEach { week ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                            week.forEach { d ->
-                                val done = d != null && daySet.contains(d.toString())
-                                val isToday = d == today
-                                // дни до создания дела — пустые, а не «пропущенные»
-                                val beforeBirth = d != null &&
-                                    createdAt != LocalDate.EPOCH && d.isBefore(createdAt)
-                                // Число месяца в клетке: календарь читается как настоящий
-                                Box(
-                                    modifier = Modifier
-                                        .size(cell)
-                                        .clip(Radius.cell)
-                                        .background(
-                                            when {
-                                                d == null -> Color.Transparent
-                                                done -> MaterialTheme.colorScheme.primary
-                                                beforeBirth -> MaterialTheme.colorScheme
-                                                    .surfaceVariant.copy(alpha = 0.4f)
-                                                else -> MaterialTheme.colorScheme.surfaceVariant
-                                            },
-                                        )
-                                        .then(
-                                            // «сегодня» — рамка контрастного цвета поверх заливки
-                                            if (isToday) {
-                                                Modifier.border(
-                                                    width = 2.dp,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    shape = Radius.cell,
-                                                )
-                                            } else {
-                                                Modifier
-                                            },
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (d != null && cell >= 20.dp) {
-                                        Text(
-                                            text = "${d.dayOfMonth}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (done) {
-                                                MaterialTheme.colorScheme.onPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+internal fun streakOf(daySet: Set<String>, today: LocalDate): Int {
+    var day = if (today.toString() in daySet) today else today.minusDays(1)
+    var count = 0
+    while (day.toString() in daySet) { count++; day = day.minusDays(1) }
+    return count
 }
 
-/** Самая длинная серия за всю историю. */
 internal fun bestStreak(daySet: Set<String>, today: LocalDate): Int {
-    if (daySet.isEmpty()) return 0
-    val sorted = daySet.sorted()
-    var best = 1
-    var run = 1
-    for (i in 1 until sorted.size) {
-        val prev = LocalDate.parse(sorted[i - 1])
-        val cur = LocalDate.parse(sorted[i])
-        run = if (cur == prev.plusDays(1)) run + 1 else 1
-        if (run > best) best = run
+    val sorted = daySet.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }.filter { !it.isAfter(today) }.sorted()
+    var best = 0
+    var run = 0
+    var previous: LocalDate? = null
+    sorted.forEach { day ->
+        run = if (previous?.plusDays(1) == day) run + 1 else 1
+        best = maxOf(best, run)
+        previous = day
     }
     return best
 }

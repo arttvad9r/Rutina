@@ -112,7 +112,7 @@ private val DarkColors = darkColorScheme(
     scrim = Color(0xFF000000),
 )
 
-// Компактная типографика: всё должно укладываться на экран без прокрутки.
+// Компактная типографика; длинные экраны прокручиваются без сжатия текста.
 private val AppTypography = Typography(
     displaySmall = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold),
     headlineSmall = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
@@ -123,7 +123,7 @@ private val AppTypography = Typography(
     bodySmall = TextStyle(fontSize = 12.5.sp, lineHeight = 17.sp),
     labelLarge = TextStyle(fontSize = 13.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
     labelMedium = TextStyle(fontSize = 11.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 10.5.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 11.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
 )
 
 @Composable

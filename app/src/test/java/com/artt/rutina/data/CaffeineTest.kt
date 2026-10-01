@@ -14,6 +14,31 @@ import java.time.LocalTime
  * кофеин мешает засыпанию.
  */
 class CaffeineTest {
+    @Test
+    fun `400 мг делится на три готовых приёма`() {
+        assertEquals(listOf(150, 150, 100), CaffeineLogic.splitDoses(400))
+    }
+
+    @Test
+    fun `корректировка неотмеченной дозы не считается выпитым кофеином`() {
+        val doses = listOf(CaffeineIntake(day = "2026-10-01", mg = 150, slot = 0),
+            CaffeineIntake(day = "2026-10-01", mg = 100, slot = 1, recorded = false))
+        assertEquals(150, CaffeineLogic.totalMg(doses))
+    }
+
+    @Test
+    fun `уменьшение плана не скрывает отмеченный третий приём`() {
+        val doses = listOf(CaffeineIntake(day = "2026-10-01", mg = 100, slot = 2))
+        assertEquals(listOf(0, 2), CaffeineLogic.visibleSlots(listOf(50), doses))
+    }
+
+    @Test
+    fun `снятие первой отметки не перемещает второй и третий приёмы`() {
+        val intakes = listOf(CaffeineIntake(day = "2026-10-01", mg = 100, slot = 0, recorded = false),
+            CaffeineIntake(day = "2026-10-01", mg = 50, slot = 2))
+        assertEquals(listOf(0, 1, 2), CaffeineLogic.visibleSlots(listOf(100, 50, 50), intakes))
+        assertEquals(50, CaffeineLogic.totalMg(intakes))
+    }
 
     @Test
     fun `норма делится на приёмы кратными пятидесяти и большие идут первыми`() {

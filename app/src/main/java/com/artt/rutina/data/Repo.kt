@@ -3,6 +3,7 @@ package com.artt.rutina.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import androidx.room.withTransaction
 import java.time.LocalDate
 
 /** Всё, что нужно экранам: привычки + их отметки. */
@@ -76,4 +77,32 @@ class Repo(private val db: RutinaDb) {
         db.caffeine().insert(CaffeineIntake(day = day.toString(), at = at, mg = mg))
 
     suspend fun removeCaffeine(id: Long) = db.caffeine().deleteById(id)
+
+    /** Номер приёма сохраняется: снятие первой отметки не сдвигает вторую и третью. */
+    suspend fun toggleCaffeine(day: LocalDate, slot: Int, mg: Int) = db.withTransaction {
+        val dao = db.caffeine()
+        val existing = dao.dayIntakes(day.toString()).firstOrNull { it.slot == slot }
+        if (existing == null) {
+            dao.insert(CaffeineIntake(day = day.toString(), mg = mg, slot = slot))
+        } else {
+            dao.update(existing.copy(recorded = !existing.recorded,
+                at = if (existing.recorded) existing.at else System.currentTimeMillis()))
+        }
+    }
+
+    suspend fun editCaffeineDose(day: LocalDate, slot: Int, mg: Int, at: Long?) = db.withTransaction {
+        val dao = db.caffeine()
+        val existing = dao.dayIntakes(day.toString()).firstOrNull { it.slot == slot }
+        if (existing == null) {
+            dao.insert(CaffeineIntake(day = day.toString(), mg = mg, slot = slot, recorded = false))
+        } else {
+            dao.update(existing.copy(mg = mg, at = at ?: existing.at))
+        }
+    }
+
+    suspend fun setCaffeineTarget(targetMg: Int) = db.withTransaction {
+        val settings = caffeineSettingsNow()
+        if (settings.targetMg != targetMg) db.caffeine().clearPlannedDoses()
+        saveCaffeineSettings(settings.copy(targetMg = targetMg))
+    }
 }

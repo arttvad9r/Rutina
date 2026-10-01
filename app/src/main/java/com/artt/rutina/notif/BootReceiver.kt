@@ -19,6 +19,9 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 val habits = app.repo.habits.first()
                 Reminders.rescheduleAll(context, habits)
+                val settings = app.repo.caffeineSettingsNow()
+                settings.timerEndMs?.takeIf { settings.enabled && it > System.currentTimeMillis() }
+                    ?.let { CaffeineTimer.schedule(context, it) }
             } finally {
                 pending.finish()
             }

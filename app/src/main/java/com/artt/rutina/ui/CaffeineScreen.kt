@@ -3,534 +3,200 @@ package com.artt.rutina.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.artt.rutina.data.CaffeineIntake
-import com.artt.rutina.data.CaffeineLogic
-import com.artt.rutina.data.CaffeineSettings
+import com.artt.rutina.data.*
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-internal val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale("ru"))
-private val DAY_SHORT_FORMAT = DateTimeFormatter.ofPattern("d MMM", Locale("ru"))
+internal val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 
-/**
- * Экран трекера кофеина: норма, разбивка на приёмы, расписание, таймер и история.
- * Собран из тех же токенов и компонентов, что остальное приложение (Radius/Space,
- * карточки с рамкой, плоские меню, зелёный только на главном действии).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CaffeineScreen(
-    settings: CaffeineSettings,
-    intakes: List<CaffeineIntake>,
-    today: LocalDate,
-    onBack: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onAddIntake: (Int) -> Unit,
-    onRemoveIntake: (Long) -> Unit,
-    onStartTimer: (Int, Int?) -> Unit,
-    onCancelTimer: () -> Unit,
-) {
-    val todayKey = today.toString()
-    val todayIntakes = intakes.filter { it.day == todayKey }.sortedBy { it.at }
-
-    val plan = CaffeineLogic.plan(
-        targetMg = settings.targetMg,
-        wakeMinutes = settings.wakeMinutes,
-        bedtimeMinutes = settings.bedtimeMinutes,
-    )
-    val total = todayIntakes.sumOf { it.mg }
-    val doneCount = todayIntakes.size
-
-    // Тикающий таймер: секунды перерисовываются, только пока отсчёт идёт.
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val timerEnd = settings.timerEndMs
-    LaunchedEffect(timerEnd) {
-        // Пока отсчёт идёт — секунды; в остальное время раз в полминуты, чтобы подсказка
-        // о рекомендуемом приёме не устаревала, если экран остался открытым.
-        while (true) {
-            delay(if (timerEnd != null && timerEnd > System.currentTimeMillis()) 1_000 else 30_000)
-            nowMs = System.currentTimeMillis()
+fun CaffeineScreen(settings: CaffeineSettings, intakes: List<CaffeineIntake>, today: LocalDate,
+    onBack: () -> Unit, onOpenSettings: () -> Unit, onToggleIntake: (Int, Int) -> Unit,
+    onEditDose: (Int, Int, Long?) -> Unit,
+    onStartTimer: (Int, Int?) -> Unit, onCancelTimer: () -> Unit) {
+    val dayIntakes = intakes.filter { it.day == today.toString() }
+    val taken = dayIntakes.filter { it.recorded }
+    val plan = CaffeineLogic.plan(settings.targetMg, settings.wakeMinutes, settings.bedtimeMinutes)
+    val slots = CaffeineLogic.visibleSlots(plan.doses, dayIntakes)
+    var editing by rememberSaveable(today.toString()) { mutableIntStateOf(-1) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(settings.timerEndMs) {
+        now = System.currentTimeMillis()
+        while (settings.timerEndMs != null && settings.timerEndMs > now) {
+            delay(1000); now = System.currentTimeMillis()
         }
     }
-    val timerActive = timerEnd != null && timerEnd > nowMs
-
-    // Время последней отметки — точка отсчёта для следующего приёма: отметка позже
-    // расписания сдвигает день, и подсказка должна это учитывать.
-    val nowMinutes = LocalTime.now().let { it.hour * 60 + it.minute }
-    val lastIntakeMinutes = todayIntakes.lastOrNull()?.let { intake ->
-        Instant.ofEpochMilli(intake.at).atZone(ZoneId.systemDefault()).toLocalTime()
-            .let { it.hour * 60 + it.minute }
-    }
-    val recommendedMinutes = CaffeineLogic.nextIntakeMinutes(nowMinutes, plan.schedule, lastIntakeMinutes)
-    val suggestedMinutes = CaffeineLogic.timerMinutes(nowMinutes, recommendedMinutes)
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+    val timerActive = settings.timerEndMs?.let { it > now } == true
+    var historyExpanded by rememberSaveable { mutableStateOf(false) }
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        TopAppBar(title = { Text("Кофеин") }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") } },
+            actions = { IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Настройки трекера") } })
+    }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+            .padding(horizontal = Space.screen).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(vertical = 12.dp)) {
+                Text("${CaffeineLogic.totalMg(dayIntakes)} из ${settings.targetMg} мг", style = MaterialTheme.typography.displaySmall)
+                Text("Принято сегодня", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Card(modifier = Modifier.fillMaxWidth(), shape = Radius.card, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Приёмы сегодня", style = MaterialTheme.typography.bodyLarge)
+                        Text("${taken.size} из ${slots.size}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                },
-                title = {
-                    Text("Кофеин", style = MaterialTheme.typography.titleMedium)
-                },
-                actions = {
-                    // Норма, подъём и сон — на отдельном экране: на этом нужны приёмы и таймер.
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Настройки трекера")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = Space.screen)
-                .padding(top = Space.xs, bottom = Space.m),
-            // Экраны приложения не прокручиваются: свободное место отдаётся вниз,
-            // а не собирается провалом между блоками.
-            verticalArrangement = Arrangement.spacedBy(Space.s),
-        ) {
-            TotalCard(
-                total = total,
-                doneCount = doneCount,
-                moments = plan.doses.size,
-            )
-
-            DosesCard(
-                doses = plan.doses,
-                times = plan.schedule.times,
-                todayIntakes = todayIntakes,
-                onAdd = { onAddIntake(it) },
-                onRemove = onRemoveIntake,
-            )
-
-            // Таймер всегда доступен: даже при выполненной норме может хотеться
-            // отсчитать интервал — блокировать его незачем.
-            TimerCard(
-                timerActive = timerActive,
-                remainingMs = if (timerActive) timerEnd!! - nowMs else 0L,
-                slot = settings.timerSlot,
-                suggestedMinutes = suggestedMinutes,
-                recommendedMinutes = recommendedMinutes,
-                // slot — индекс только что отмеченного приёма: после первого это 0,
-                // поэтому подпись «после N-го» считается как slot + 1.
-                onStart = { minutes -> onStartTimer(minutes, doneCount - 1) },
-                onCancel = onCancelTimer,
-            )
-
-            HistoryCard(intakes = intakes, today = today)
-        }
-    }
-}
-
-@Composable
-private fun TotalCard(total: Int, doneCount: Int, moments: Int) {
-    val allDone = doneCount >= moments
-    // Только сумма за день: сколько приёмов закрыто — видно по галочкам в «Приёмах
-    // сегодня», норма живёт в настройках. Заголовок не пересказывает их второй раз.
-    Text(
-        text = "$total мг",
-        style = MaterialTheme.typography.titleLarge,
-        color = if (allDone) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
-    )
-}
-
-@Composable
-private fun DosesCard(
-    doses: List<Int>,
-    times: List<Int>,
-    todayIntakes: List<CaffeineIntake>,
-    onAdd: (Int) -> Unit,
-    onRemove: (Long) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
-            Text(
-                text = "Приёмы сегодня",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(Space.s))
-
-            doses.forEachIndexed { i, mg ->
-                // Приём считается отмеченным по порядку: отметки идут друг за другом,
-                // поэтому i-я отметка закрывает i-й приём разбивки.
-                val intake = todayIntakes.getOrNull(i)
-                val done = intake != null
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        // Снять ошибочную отметку — тапом по самой отметке, там же,
-                        // где она ставилась. Отдельного списка отметок не нужно.
-                        .then(
-                            if (done) {
-                                Modifier.clickable { onRemove(intake!!.id) }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (done) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (done) {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(12.dp),
-                            )
+                    slots.forEachIndexed { rowIndex, slot ->
+                        val intake = dayIntakes.firstOrNull { it.slot == slot }
+                        val planned = plan.doses.getOrNull(slot)
+                        val mg = intake?.mg ?: planned ?: CaffeineLogic.STEP_MG
+                        val done = intake?.recorded == true
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.weight(1f).clip(Radius.field).clickable {
+                                editing = -1; onToggleIntake(slot, mg)
+                            }.padding(vertical = 18.dp).semantics {
+                                contentDescription = "Приём ${slot + 1}, $mg мг, ${if (done) "отмечен" else "не отмечен"}"
+                            }, verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = CircleShape, color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                    border = if (done) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = Modifier.size(26.dp)) {
+                                    if (done) Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null,
+                                        tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp)) }
+                                }
+                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                    Text("$mg мг", style = MaterialTheme.typography.titleLarge)
+                                    Text(buildString {
+                                        append(listOf("Первый", "Второй", "Третий").getOrNull(slot)?.plus(" приём") ?: "Приём ${slot + 1}")
+                                        if (done) append(" · принято в " + Instant.ofEpochMilli(intake!!.at).atZone(ZoneId.systemDefault()).format(TIME_FORMAT))
+                                        else plan.schedule.times.getOrNull(slot)?.let { append(" · " + CaffeineLogic.timeOf(it).format(TIME_FORMAT)) }
+                                    }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (planned != null && mg != planned) Text("По плану $planned мг", style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            IconButton(onClick = { editing = if (editing == slot) -1 else slot }) {
+                                Icon(Icons.Default.Edit, "Изменить приём ${slot + 1}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
+                        if (editing == slot) DoseEditor(mg, intake?.takeIf { it.recorded }?.at, today,
+                            onCancel = { editing = -1 }, onSave = { value, at -> onEditDose(slot, value, at); editing = -1 })
+                        if (rowIndex < slots.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    Spacer(Modifier.width(Space.m))
-                    // Отмеченная строка показывает фактическую дозу отметки, а не дозу
-                    // из текущей разбивки: после смены нормы они расходятся, и «принято
-                    // 100 мг» над отметкой в 50 мг читалось бы как ошибка.
-                    Text(
-                        text = "${intake?.mg ?: mg} мг",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (done) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                    Spacer(Modifier.weight(1f))
-                    if (done) {
-                        Text(
-                            text = "принято",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        times.getOrNull(i)?.let { t ->
-                            Text(
-                                text = CaffeineLogic.timeOf(t).format(TIME_FORMAT),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                }
+            }
+            Text("Нажми на приём, чтобы отметить или снять отметку.", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TimerCard(timerActive, if (timerActive) settings.timerEndMs!! - now else 0,
+                settings.timerEndMs, onStart = { onStartTimer(it, null) }, onCancel = onCancelTimer)
+            Column {
+                TextButton(onClick = { historyExpanded = !historyExpanded }, modifier = Modifier.fillMaxWidth()) {
+                    Text("История", modifier = Modifier.weight(1f))
+                    Icon(if (historyExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
+                }
+                if (historyExpanded) {
+                    val history = intakes.filter { it.recorded }.groupBy { it.day }.toSortedMap(compareByDescending { it })
+                    if (history.isEmpty()) Text("Пока нет отметок", style = MaterialTheme.typography.bodyMedium)
+                    history.entries.take(30).forEach { (date, list) ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (date == today.toString()) "Сегодня" else LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))),
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text("${list.sumOf { it.mg }} мг · ${list.size} приёма", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
-
-            // Доза не из шаблона: как у таймера — «− 100 мг +», кнопка «Отметить».
-            // Пресеты в настройках остаются быстрым путём, но больше не единственным.
-            if (todayIntakes.size < doses.size) {
-                Spacer(Modifier.height(Space.s))
-                var mg by remember(todayIntakes.size, doses) {
-                    mutableStateOf(doses.getOrElse(todayIntakes.size) { CaffeineLogic.STEP_MG })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Space.s),
-                ) {
-                    StepperButton(Icons.Filled.Remove, "Меньше", enabled = true) {
-                        mg = (mg - CaffeineLogic.STEP_MG).coerceAtLeast(CaffeineLogic.STEP_MG)
-                    }
-                    Text(
-                        text = "$mg мг",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center,
-                    )
-                    StepperButton(Icons.Filled.Add, "Больше", enabled = true) {
-                        mg = (mg + CaffeineLogic.STEP_MG).coerceAtMost(CaffeineLogic.MAX_INTAKE_MG)
-                    }
-                }
-                Spacer(Modifier.height(Space.s))
-                Button(
-                    onClick = { onAdd(mg) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = Radius.field,
-                ) {
-                    Text("Отметить $mg мг")
-                }
-            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimerCard(
-    timerActive: Boolean,
-    remainingMs: Long,
-    slot: Int?,
-    suggestedMinutes: Int,
-    recommendedMinutes: Int?,
-    onStart: (Int) -> Unit,
-    onCancel: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
-            if (timerActive) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = when {
-                            slot == null || slot < 0 -> "Таймер до следующего приёма"
-                            else -> "Таймер после ${slot + 1}-го приёма"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = formatRemaining(remainingMs),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    TextButton(
-                        onClick = onCancel,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    ) {
-                        Text("Отменить")
-                    }
-                }
+private fun DoseEditor(initialMg: Int, initialAt: Long?, today: LocalDate,
+    onCancel: () -> Unit, onSave: (Int, Long?) -> Unit) {
+    var mg by rememberSaveable(initialMg, initialAt) { mutableIntStateOf(initialMg) }
+    val time = initialAt?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalTime() }
+    var hour by rememberSaveable(initialAt) { mutableIntStateOf(time?.hour ?: 8) }
+    var minute by rememberSaveable(initialAt) { mutableIntStateOf(time?.minute ?: 0) }
+    var picker by remember { mutableStateOf(false) }
+    Surface(shape = Radius.field, color = MaterialTheme.colorScheme.primaryContainer) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Доза · шаг 50 мг", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                StepperButton(Icons.Default.Remove, "Уменьшить дозу на 50 мг", mg > 50) { mg = (mg - 50).coerceAtLeast(50) }
+                Text("$mg мг", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                StepperButton(Icons.Default.Add, "Увеличить дозу на 50 мг", mg < CaffeineLogic.MAX_INTAKE_MG) { mg = (mg + 50).coerceAtMost(CaffeineLogic.MAX_INTAKE_MG) }
+            }
+            if (initialAt != null) TextButton(onClick = { picker = true }) { Text("Время приёма · %02d:%02d".format(Locale.ROOT, hour, minute)) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onCancel) { Text("Отмена") }
+                Button(onClick = {
+                    val at = initialAt?.let { today.atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+                    onSave(mg, at)
+                }, shape = Radius.field) { Text("Сохранить") }
+            }
+        }
+    }
+    if (picker) {
+        val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
+        AlertDialog(onDismissRequest = { picker = false }, title = { Text("Время приёма") }, shape = Radius.card,
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { TimePicker(state) } },
+            confirmButton = { TextButton(onClick = { hour = state.hour; minute = state.minute; picker = false }) { Text("Ок") } },
+            dismissButton = { TextButton(onClick = { picker = false }) { Text("Отмена") } })
+    }
+}
+
+@Composable
+private fun TimerCard(active: Boolean, remaining: Long, end: Long?, onStart: (Int) -> Unit, onCancel: () -> Unit) {
+    var minutes by rememberSaveable { mutableIntStateOf(CaffeineLogic.DEFAULT_TIMER_MINUTES) }
+    Card(modifier = Modifier.fillMaxWidth(), shape = Radius.card, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Пауза", style = MaterialTheme.typography.bodyLarge)
+            if (active) {
+                val seconds = ((remaining + 999) / 1000).coerceAtLeast(0)
+                Text("%02d:%02d:%02d".format(Locale.ROOT, seconds / 3600, seconds / 60 % 60, seconds % 60),
+                    Modifier.fillMaxWidth().padding(vertical = 16.dp), style = MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+                Text("До " + Instant.ofEpochMilli(end!!).atZone(ZoneId.systemDefault()).format(TIME_FORMAT),
+                    Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), shape = Radius.field) { Text("Отменить таймер") }
             } else {
-                // Компактный таймер: только «− время +» и одна строка подписи,
-                // без отдельного заголовка и лишних отступов.
-                // Ключ сбрасывает счётчик на предложенное время: после отметки приёма
-                // рекомендуемый интервал меняется, и старый остаток смысла не имеет.
-                var minutes by remember(suggestedMinutes) {
-                    mutableStateOf(suggestedMinutes.coerceAtLeast(CaffeineLogic.TIMER_STEP_MINUTES))
+                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StepperButton(Icons.Default.Remove, "Уменьшить паузу на 15 минут", minutes > 15) { minutes -= 15 }
+                    Text("$minutes мин", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleLarge)
+                    StepperButton(Icons.Default.Add, "Увеличить паузу на 15 минут", minutes < CaffeineLogic.MAX_TIMER_MINUTES) { minutes += 15 }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Space.s),
-                ) {
-                    StepperButton(Icons.Filled.Remove, "Меньше", enabled = true) {
-                        minutes = (minutes - CaffeineLogic.TIMER_STEP_MINUTES)
-                            .coerceAtLeast(CaffeineLogic.TIMER_STEP_MINUTES)
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = formatDuration(minutes),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = if (recommendedMinutes != null) {
-                                "следующий приём в " +
-                                    CaffeineLogic.timeOf(recommendedMinutes).format(TIME_FORMAT)
-                            } else {
-                                // Расписание молчит: окно дня закрыто или отметки ушли за него.
-                                "интервал вручную"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    StepperButton(Icons.Filled.Add, "Больше", enabled = true) {
-                        minutes = (minutes + CaffeineLogic.TIMER_STEP_MINUTES)
-                            .coerceAtMost(CaffeineLogic.MAX_TIMER_MINUTES)
-                    }
-                }
-                Spacer(Modifier.height(Space.s))
-                Button(
-                    onClick = { onStart(minutes) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = Radius.field,
-                ) {
-                    Text("Запустить")
-                }
+                Button(onClick = { onStart(minutes) }, modifier = Modifier.fillMaxWidth(), shape = Radius.field) { Text("Запустить таймер") }
             }
         }
     }
 }
 
-/** Круглая кнопка «−» или «+» у таймера. */
 @Composable
-/** Кнопка «−/+» степпера: общая для экрана кофеина и его настроек. */
-internal fun StepperButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    description: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = Radius.field,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.size(40.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = description, modifier = Modifier.size(IconSize.action))
-        }
+internal fun StepperButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
+    OutlinedIconButton(onClick = onClick, enabled = enabled, shape = Radius.field, modifier = Modifier.size(48.dp)) {
+        Icon(icon, description, modifier = Modifier.size(20.dp))
     }
-}
-
-@Composable
-private fun HistoryCard(intakes: List<CaffeineIntake>, today: LocalDate) {
-    // Суммы по дням, свежие сверху.
-    val byDay = intakes
-        .groupBy { it.day }
-        .mapNotNull { (day, list) ->
-            val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: return@mapNotNull null
-            date to list
-        }
-        .sortedByDescending { it.first }
-        .take(5)
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = Radius.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(horizontal = Space.l, vertical = 10.dp)) {
-            Text(
-                text = "История",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(Space.xs))
-            if (byDay.isEmpty()) {
-                Text(
-                    text = "Пока пусто — отметьте первый приём",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                byDay.forEach { (date, list) ->
-                    val isTodayRow = date == today
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(26.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = if (isTodayRow) "Сегодня" else date.format(DAY_SHORT_FORMAT),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isTodayRow) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = "${list.sumOf { it.mg }} мг",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun formatDuration(totalMinutes: Int): String {
-    val h = totalMinutes / 60
-    val m = totalMinutes % 60
-    return when {
-        h == 0 -> "$m мин"
-        m == 0 -> "$h ч"
-        else -> "$h ч $m м"
-    }
-}
-
-private fun formatRemaining(ms: Long): String {
-    val total = ((ms + 999) / 1000).coerceAtLeast(0)
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return "%d:%02d:%02d".format(Locale.ROOT, h, m, s)
 }

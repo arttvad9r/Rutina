@@ -2,6 +2,7 @@ package com.artt.rutina.data
 
 import android.content.Context
 import androidx.room.Dao
+import androidx.room.ColumnInfo
 import androidx.room.Database
 import androidx.room.Delete
 import androidx.room.Entity
@@ -32,6 +33,8 @@ data class Habit(
      * Считается от дня создания: курс на 30 дней, начатый 1-го, идёт по 30-е.
      */
     val durationDays: Int = NO_LIMIT,
+    /** Ручное завершение; пауза по-прежнему задаётся через active. */
+    val finishedAt: Long? = null,
 )
 
 /** Отметка о выполнении за конкретный день (день в формате ISO yyyy-MM-dd). */
@@ -55,6 +58,10 @@ data class CaffeineIntake(
     /** Время приёма, мс от эпохи — для истории и порядка в дне. */
     val at: Long = System.currentTimeMillis(),
     val mg: Int,
+    /** Стабильный номер приёма, независимо от порядка и времени отметок. */
+    val slot: Int? = null,
+    /** false — сохранённая корректировка ещё не отмеченной дозы. */
+    @ColumnInfo(defaultValue = "1") val recorded: Boolean = true,
 )
 
 /** Настройки трекера кофеина: выключен, пока пользователь его не включит. */
@@ -124,6 +131,14 @@ interface RecordDao {
 
 @Dao
 interface CaffeineDao {
+    @Update
+    suspend fun update(intake: CaffeineIntake)
+
+    @Query("SELECT * FROM caffeine_intakes WHERE day = :day ORDER BY at, id")
+    suspend fun dayIntakes(day: String): List<CaffeineIntake>
+
+    @Query("DELETE FROM caffeine_intakes WHERE recorded = 0")
+    suspend fun clearPlannedDoses()
     @Query("SELECT * FROM caffeine_intakes ORDER BY at DESC")
     fun observeAll(): Flow<List<CaffeineIntake>>
 
@@ -148,7 +163,7 @@ interface CaffeineDao {
 
 @Database(
     entities = [Habit::class, Record::class, CaffeineIntake::class, CaffeineSettings::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class RutinaDb : RoomDatabase() {
@@ -205,6 +220,23 @@ abstract class RutinaDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE habits ADD COLUMN finishedAt INTEGER")
+                db.execSQL("ALTER TABLE caffeine_intakes ADD COLUMN slot INTEGER")
+                db.execSQL("ALTER TABLE caffeine_intakes ADD COLUMN recorded INTEGER NOT NULL DEFAULT 1")
+                // Старые отметки привязываются один раз, сохраняя дозу и время.
+                db.execSQL("""
+                    UPDATE caffeine_intakes SET slot = (
+                        SELECT COUNT(*) FROM caffeine_intakes AS earlier
+                        WHERE earlier.day = caffeine_intakes.day
+                          AND (earlier.at < caffeine_intakes.at OR
+                               (earlier.at = caffeine_intakes.at AND earlier.id < caffeine_intakes.id))
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun get(context: Context): RutinaDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -212,7 +244,7 @@ abstract class RutinaDb : RoomDatabase() {
                     RutinaDb::class.java,
                     "rutina.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

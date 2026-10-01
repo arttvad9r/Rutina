@@ -14,6 +14,18 @@ import java.time.ZoneId
  * на один день тут выглядит как «случайно исчезло» и её легко не заметить глазами.
  */
 class CourseTest {
+    @org.junit.Test
+    fun `ручное завершение скрывает привычку но день завершения доступен в истории`() {
+        val zone = java.time.ZoneId.systemDefault()
+        val day = java.time.LocalDate.of(2026, 10, 1)
+        val habit = Habit(name = "Тест", createdAt = day.minusDays(5).atStartOfDay(zone).toInstant().toEpochMilli(),
+            finishedAt = day.atTime(12, 0).atZone(zone).toInstant().toEpochMilli())
+        org.junit.Assert.assertTrue(finishedOn(habit, day))
+        org.junit.Assert.assertFalse(finishedOn(habit, day.minusDays(1)))
+        org.junit.Assert.assertTrue(canMarkDay(habit, day, day))
+        org.junit.Assert.assertFalse(canMarkDay(habit, day.plusDays(1), day.plusDays(1)))
+        org.junit.Assert.assertFalse(canMarkDay(habit, day.minusDays(6), day))
+    }
 
     private val zone: ZoneId = ZoneId.of("Europe/Moscow")
 
