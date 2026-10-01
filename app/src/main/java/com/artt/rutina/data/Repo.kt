@@ -14,6 +14,24 @@ data class Snapshot(
 
 class Repo(private val db: RutinaDb) {
 
+    suspend fun backup(): BackupData = db.withTransaction {
+        BackupData(db.habits().all(), db.records().all(), db.caffeine().all(),
+            caffeineSettingsNow().copy(timerEndMs = null, timerSlot = null))
+    }
+
+    suspend fun restore(backup: BackupData): List<Habit> {
+        backup.validate()
+        return db.withTransaction {
+            val previous = db.habits().all()
+            db.clearAllTables()
+            db.habits().insertAll(backup.habits)
+            db.records().insertAll(backup.records)
+            db.caffeine().insertAll(backup.intakes)
+            saveCaffeineSettings(backup.settings.copy(timerEndMs = null, timerSlot = null))
+            previous
+        }
+    }
+
     val habits: Flow<List<Habit>> = db.habits().observeAll()
 
     val snapshot: Flow<Snapshot> = combine(habits, db.records().observeAll()) { hs, rs ->

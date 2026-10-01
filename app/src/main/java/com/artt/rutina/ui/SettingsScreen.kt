@@ -32,7 +32,7 @@ import com.artt.rutina.data.CaffeineLogic
 import com.artt.rutina.data.CaffeineSettings
 
 /**
- * Настройки приложения. Пока здесь одно: включение трекера кофеина — он нужен
+ * Настройки приложения и перенос данных. Трекер кофеина нужен
  * не всегда, поэтому по умолчанию выключен и не занимает место на главном экране.
  * Норма, подъём и сон задаются на самом трекере: они нужны, только когда он включён.
  */
@@ -100,6 +100,7 @@ fun SettingsScreen(
             Text("При выключении трекер скрывается с главной. Настройки и история сохраняются.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp))
+            BackupControls()
         }
     }
 }

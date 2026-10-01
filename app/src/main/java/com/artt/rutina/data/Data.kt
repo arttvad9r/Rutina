@@ -95,6 +95,9 @@ interface HabitDao {
     @Insert
     suspend fun insert(habit: Habit): Long
 
+    @Insert
+    suspend fun insertAll(habits: List<Habit>)
+
     @Update
     suspend fun update(habit: Habit)
 
@@ -107,6 +110,12 @@ interface HabitDao {
 
 @Dao
 interface RecordDao {
+    @Query("SELECT * FROM records ORDER BY habitId, day")
+    suspend fun all(): List<Record>
+
+    @Insert
+    suspend fun insertAll(records: List<Record>)
+
     @Query("SELECT * FROM records WHERE day BETWEEN :from AND :to")
     fun observeRange(from: String, to: String): Flow<List<Record>>
 
@@ -131,6 +140,12 @@ interface RecordDao {
 
 @Dao
 interface CaffeineDao {
+    @Query("SELECT * FROM caffeine_intakes ORDER BY id")
+    suspend fun all(): List<CaffeineIntake>
+
+    @Insert
+    suspend fun insertAll(intakes: List<CaffeineIntake>)
+
     @Update
     suspend fun update(intake: CaffeineIntake)
 

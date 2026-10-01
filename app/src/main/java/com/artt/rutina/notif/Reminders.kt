@@ -80,6 +80,10 @@ object Reminders {
     fun cancel(context: Context, habit: Habit) {
         val alarm = context.getSystemService(AlarmManager::class.java) ?: return
         alarm.cancel(pending(context, habit))
+        val snooze = PendingIntent.getBroadcast(context, snoozeRequestCode(habit.id),
+            Intent(context, ReminderReceiver::class.java).apply { action = ACTION_REMIND },
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+        snooze?.let { alarm.cancel(it); it.cancel() }
     }
 
     /** Ближайший момент наступления hour:minute — сегодня или завтра. */

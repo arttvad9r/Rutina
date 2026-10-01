@@ -1,6 +1,13 @@
 package com.artt.rutina.ui
 
 import android.content.Context
+import android.net.Uri
+import android.app.NotificationManager
+import com.artt.rutina.data.BackupData
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import java.io.IOException
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +35,74 @@ class MainViewModel(
     private val repo: Repo,
     private val context: Context,
 ) : ViewModel() {
+
+    var backupBusy by mutableStateOf(false)
+        private set
+    var backupMessage by mutableStateOf<String?>(null)
+        private set
+    var pendingBackup by mutableStateOf<BackupData?>(null)
+        private set
+
+    fun exportBackup(uri: Uri) {
+        if (backupBusy) return
+        backupBusy = true
+        backupMessage = null
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val text = repo.backup().json()
+                    val stream = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException()
+                    stream.bufferedWriter(Charsets.UTF_8).use { it.write(text) }
+                }
+                backupMessage = "Резервная копия сохранена."
+            } catch (e: CancellationException) { throw e
+            } catch (_: Exception) { backupMessage = "Не удалось сохранить файл. Выберите другое место и повторите." }
+            finally { backupBusy = false }
+        }
+    }
+
+    fun prepareImport(uri: Uri) {
+        if (backupBusy) return
+        backupBusy = true
+        backupMessage = null
+        viewModelScope.launch {
+            try {
+                pendingBackup = withContext(Dispatchers.IO) {
+                    val stream = context.contentResolver.openInputStream(uri) ?: throw IOException()
+                    stream.use(BackupData::read)
+                }
+            } catch (e: CancellationException) { throw e
+            } catch (e: IllegalArgumentException) {
+                backupMessage = e.message ?: "Файл содержит некорректные данные. Текущие данные не изменены."
+            } catch (_: Exception) {
+                backupMessage = "Не удалось прочитать резервную копию. Проверьте файл. Текущие данные не изменены."
+            } finally { backupBusy = false }
+        }
+    }
+
+    fun dismissImport() { if (!backupBusy) pendingBackup = null }
+
+    fun confirmImport() {
+        val backup = pendingBackup ?: return
+        if (backupBusy) return
+        backupBusy = true
+        viewModelScope.launch {
+            try {
+                val previous = withContext(Dispatchers.IO) { repo.restore(backup) }
+                previous.forEach { Reminders.cancel(context, it) }
+                CaffeineTimer.cancel(context)
+                context.getSystemService(NotificationManager::class.java)?.cancelAll()
+                Reminders.rescheduleAll(context, backup.habits)
+                backToToday()
+                pendingBackup = null
+                backupMessage = "Данные восстановлены из резервной копии."
+            } catch (e: CancellationException) { throw e
+            } catch (_: Exception) {
+                pendingBackup = null
+                backupMessage = "Не удалось завершить импорт. Проверьте данные и повторите."
+            } finally { backupBusy = false }
+        }
+    }
 
     /** null, пока база ещё не прочитана — экран показывает пустое состояние. */
     val snapshot = repo.snapshot.stateIn(viewModelScope, SharingStarted.WhileSubscribed(2_000), null)
